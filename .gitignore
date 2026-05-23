@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 tests/**/*.py
 !tests/unit/test_url_normalization.py
+!tests/unit/test_product_fetching.py
 .mypy_cache/
 .ruff_cache/
 .coverage
