@@ -1,15 +1,17 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 from app.common.clock import utc_now
-from app.domain.enums import CheckStatus, MonitorStatus, NotificationType
+from app.domain.enums import CheckStatus, MonitorStatus, NotificationStatus, NotificationType
 from app.infra.db.models.price_check import PriceCheckModel
+from app.product_fetching.base import ProductDataProvider
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.price_check_repository import PriceCheckRepository
 from app.repositories.product_repository import ProductRepository
-from app.product_fetching.base import ProductDataProvider
+from app.repositories.user_repository import UserRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,13 +27,17 @@ class PriceCheckService:
         price_check_repository: PriceCheckRepository,
         product_repository: ProductRepository | None = None,
         notification_repository: NotificationRepository | None = None,
+        user_repository: UserRepository | None = None,
         product_provider: ProductDataProvider | None = None,
+        notification_dedupe_window_seconds: int = 86_400,
     ):
         self.monitor_repository = monitor_repository
         self.price_check_repository = price_check_repository
         self.product_repository = product_repository
         self.notification_repository = notification_repository
+        self.user_repository = user_repository
         self.product_provider = product_provider
+        self.notification_dedupe_window_seconds = notification_dedupe_window_seconds
 
     async def run_check(self, monitor_id: int) -> PriceCheckModel:
         return (await self.run_check_with_result(monitor_id)).check
@@ -146,29 +152,80 @@ class PriceCheckService:
         if monitor.notification_channel is None:
             return []
 
+        recipient_email = await self._get_recipient_email(monitor.user_id)
         payload = {
+            "notification_type": NotificationType.TARGET_REACHED.value,
             "monitor_id": monitor.id,
             "price_check_id": check.id,
             "url": monitor.url,
+            "title": check.title,
             "target_price": str(monitor.target_price),
             "current_price": str(current_price),
             "previous_price": str(previous_price) if previous_price is not None else None,
             "currency": currency,
+            "recipient_email": recipient_email,
         }
-        notification, created = await self.notification_repository.create_pending_once(
+
+        notification_type = NotificationType.TARGET_REACHED
+        dedupe_group_key = self.notification_repository.build_dedupe_group_key(
+            notification_type=notification_type,
+            monitor_id=monitor.id,
+            channel=monitor.notification_channel,
+            semantic_payload={
+                "target_price": str(monitor.target_price),
+                "current_price": str(current_price),
+                "currency": currency,
+                "url": monitor.url,
+            },
+        )
+        now = utc_now()
+        duplicate = await self.notification_repository.find_recent_by_dedupe_group(
+            monitor_id=monitor.id,
+            channel=monitor.notification_channel,
+            notification_type=notification_type,
+            dedupe_group_key=dedupe_group_key,
+            since=now - timedelta(seconds=self.notification_dedupe_window_seconds),
+        )
+        if duplicate is not None:
+            await self.notification_repository.create_history(
+                monitor_id=monitor.id,
+                user_id=monitor.user_id,
+                product_source_id=monitor.product_source_id,
+                price_check_id=check.id,
+                channel=monitor.notification_channel,
+                notification_type=notification_type,
+                dedupe_key=f"{dedupe_group_key}:duplicated:{check.id or uuid4().hex}",
+                status=NotificationStatus.DUPLICATED,
+                payload={
+                    **payload,
+                    "duplicated_of_notification_id": duplicate.id,
+                },
+                error_code="duplicate_notification",
+                error_message=(
+                    "Same notification was already created inside the dedupe window"
+                ),
+            )
+            return []
+
+        notification = await self.notification_repository.create_history(
             monitor_id=monitor.id,
             user_id=monitor.user_id,
             product_source_id=monitor.product_source_id,
             price_check_id=check.id,
             channel=monitor.notification_channel,
-            notification_type=NotificationType.TARGET_REACHED,
-            dedupe_key=f"target_reached:{monitor.target_price}:{currency or 'unknown'}",
+            notification_type=notification_type,
+            dedupe_key=f"{dedupe_group_key}:alert:{check.id or uuid4().hex}",
+            status=NotificationStatus.PENDING,
             payload=payload,
         )
-        if not created:
-            return []
-        monitor.last_notified_at = utc_now()
+        monitor.last_notified_at = now
         return [notification.id]
+
+    async def _get_recipient_email(self, user_id: int | None) -> str | None:
+        if user_id is None or self.user_repository is None:
+            return None
+        user = await self.user_repository.get(user_id)
+        return user.email if user is not None else None
 
     def should_notify_target(
         self,

@@ -50,11 +50,18 @@ class Settings(BaseSettings):
     check_scheduler_tick_seconds: int = 60
     dead_letter_max_items: int = 1000
 
+    notification_dedupe_window_seconds: int = 86_400
+    notification_max_retries: int = 3
+    notification_retry_base_delay_seconds: int = 30
+    notification_retry_max_delay_seconds: int = 300
+
     telegram_bot_token: str | None = None
     email_smtp_host: str | None = None
     email_smtp_port: int | None = None
     email_smtp_user: str | None = None
     email_smtp_password: str | None = Field(default=None, repr=False)
+    email_smtp_from: str | None = None
+    email_smtp_use_tls: bool = True
 
     log_level: str = "INFO"
 

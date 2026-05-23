@@ -29,7 +29,7 @@ class WorkerSettings:
             timeout=settings.check_lock_ttl_seconds,
         ),
         func(run_due_monitor_checks, max_tries=1, timeout=30),
-        func(send_notification, max_tries=settings.check_max_retries, timeout=60),
+        func(send_notification, max_tries=settings.notification_max_retries, timeout=60),
     ]
     redis_settings = redis_settings_from_url(settings.redis_url)
     on_startup = startup

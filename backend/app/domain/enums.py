@@ -35,8 +35,8 @@ class NotificationStatus(StrEnum):
     PROCESSING = "processing"
     SENT = "sent"
     FAILED = "failed"
-    CANCELLED = "cancelled"
-    DEDUPED = "deduped"
+    SKIPPED = "skipped"
+    DUPLICATED = "duplicated"
 
 
 class UserStatus(StrEnum):

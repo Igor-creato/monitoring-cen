@@ -1,8 +1,8 @@
 import hashlib
 from urllib.parse import urlparse
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.clock import utc_now

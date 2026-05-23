@@ -7,10 +7,12 @@ from arq import Retry
 
 from app.domain.enums import MonitorStatus, NotificationStatus
 from app.infra.redis_lock import acquire_redis_lock
+from app.notifications.base import NotificationDeliveryError, NotificationSkipped
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.price_check_repository import PriceCheckRepository
 from app.repositories.product_repository import ProductRepository
+from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.services.price_check_service import PriceCheckService
 
@@ -61,7 +63,11 @@ async def run_monitor_check(ctx: dict[str, Any], monitor_id: int) -> None:
                     price_check_repository=PriceCheckRepository(session),
                     product_repository=ProductRepository(session),
                     notification_repository=NotificationRepository(session),
+                    user_repository=UserRepository(session),
                     product_provider=ctx["product_provider"],
+                    notification_dedupe_window_seconds=(
+                        settings.notification_dedupe_window_seconds
+                    ),
                 )
                 result = await service.run_check_with_result(monitor_id)
 
@@ -138,7 +144,6 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
         if notification.status not in {
             NotificationStatus.PENDING,
             NotificationStatus.FAILED,
-            NotificationStatus.PROCESSING,
         }:
             logger.info(
                 "Notification skipped: status is not deliverable",
@@ -148,40 +153,57 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
             return
         await repository.mark_processing(notification)
 
-        service = NotificationService(senders={})
+        service = NotificationService(providers=ctx.get("notification_providers", {}))
         try:
             await service.send(notification.channel, notification.payload)
-        except KeyError as exc:
-            await repository.mark_failed(
+        except NotificationSkipped as exc:
+            await repository.mark_skipped(
                 notification,
-                error_code="notification_channel_not_configured",
-                error_message=f"Notification channel is not configured: {notification.channel}",
+                error_code=exc.error_code,
+                error_message=str(exc),
             )
-            await _dead_letter(
-                redis,
-                "dead:notifications",
-                {
-                    "job": "send_notification",
-                    "notification_id": notification_id,
-                    "channel": notification.channel,
-                    "error": exc.__class__.__name__,
-                    "message": str(exc),
-                },
-                settings.dead_letter_max_items,
-            )
-            logger.warning(
-                "Notification delivery skipped: channel is not configured",
+            logger.info(
+                "Notification delivery skipped",
                 notification_id=notification_id,
                 channel=notification.channel,
+                error_code=exc.error_code,
             )
             return
-        except Exception as exc:
-            if _is_final_try(ctx, settings.check_max_retries):
-                await repository.mark_failed(
-                    notification,
-                    error_code=exc.__class__.__name__,
-                    error_message=str(exc),
+        except NotificationDeliveryError as exc:
+            await repository.mark_failed(
+                notification,
+                error_code=exc.error_code,
+                error_message=str(exc),
+            )
+            if _is_final_try(ctx, settings.notification_max_retries):
+                await _dead_letter(
+                    redis,
+                    "dead:notifications",
+                    {
+                        "job": "send_notification",
+                        "notification_id": notification_id,
+                        "channel": notification.channel,
+                        "error": exc.__class__.__name__,
+                        "error_code": exc.error_code,
+                        "message": str(exc),
+                        "job_try": ctx.get("job_try"),
+                    },
+                    settings.dead_letter_max_items,
                 )
+            logger.exception(
+                "Notification delivery failed",
+                notification_id=notification_id,
+                channel=notification.channel,
+                error_code=exc.error_code,
+            )
+            raise Retry(defer=_notification_retry_delay(ctx, settings)) from exc
+        except Exception as exc:
+            await repository.mark_failed(
+                notification,
+                error_code=exc.__class__.__name__,
+                error_message=str(exc),
+            )
+            if _is_final_try(ctx, settings.notification_max_retries):
                 await _dead_letter(
                     redis,
                     "dead:notifications",
@@ -196,7 +218,7 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
                     settings.dead_letter_max_items,
                 )
             logger.exception("Notification delivery failed", notification_id=notification_id)
-            raise Retry(defer=30) from exc
+            raise Retry(defer=_notification_retry_delay(ctx, settings)) from exc
 
         await repository.mark_sent(notification)
         logger.info("Notification sent", notification_id=notification_id)
@@ -214,6 +236,12 @@ async def _dead_letter(redis, key: str, payload: dict[str, Any], max_items: int)
 
 def _is_final_try(ctx: dict[str, Any], max_tries: int) -> bool:
     return int(ctx.get("job_try") or 1) >= max_tries
+
+
+def _notification_retry_delay(ctx: dict[str, Any], settings) -> int:
+    job_try = int(ctx.get("job_try") or 1)
+    delay = settings.notification_retry_base_delay_seconds * (2 ** max(job_try - 1, 0))
+    return min(delay, settings.notification_retry_max_delay_seconds)
 
 
 async def _mark_monitor_error(ctx: dict[str, Any], monitor_id: int, exc: Exception) -> None:
