@@ -44,11 +44,20 @@ class AbstractProductProvider(ABC):
                 operation_name=f"{self.name}.fetch_product",
             )
         except ProductFetchError as exc:
+            self.logger.warning(
+                "Product fetch failed",
+                provider=self.name,
+                marketplace=normalized.marketplace,
+                normalized_url=normalized.normalized_url,
+                error_code=exc.error_code,
+                retryable=exc.retryable,
+            )
             return self._failure_snapshot(
                 normalized_url=normalized.normalized_url,
                 marketplace=normalized.marketplace,
                 error_code=exc.error_code,
                 error_message=exc.error_message,
+                raw_payload=exc.raw_payload,
             )
         except Exception as exc:
             self.logger.exception(

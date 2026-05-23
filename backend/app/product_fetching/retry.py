@@ -3,6 +3,8 @@ import random
 from collections.abc import Awaitable, Callable
 from typing import Protocol, TypeVar
 
+import structlog
+
 from app.product_fetching.exceptions import ProductFetchError
 
 T = TypeVar("T")
@@ -55,6 +57,7 @@ class ExponentialBackoffRetryPolicy:
         self.max_delay_seconds = max_delay_seconds
         self.jitter_ratio = jitter_ratio
         self._sleep = sleep
+        self._logger = structlog.get_logger("product_fetching.retry")
 
     async def run(
         self,
@@ -71,7 +74,16 @@ class ExponentialBackoffRetryPolicy:
             except BaseException as exc:
                 if attempt == self.max_attempts or not should_retry(exc):
                     raise
-                await self._sleep(self._delay_for_attempt(attempt))
+                delay = self._delay_for_attempt(attempt)
+                self._logger.warning(
+                    "Retryable product fetch error",
+                    operation_name=operation_name,
+                    attempt=attempt,
+                    max_attempts=self.max_attempts,
+                    delay_seconds=delay,
+                    error_code=getattr(exc, "error_code", exc.__class__.__name__),
+                )
+                await self._sleep(delay)
 
         raise RuntimeError(f"retry loop exited unexpectedly for {operation_name}")
 

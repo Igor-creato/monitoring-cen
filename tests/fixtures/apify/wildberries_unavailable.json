@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://www.wildberries.ru/catalog/178123457/detail.aspx",
+    "httpStatus": 200,
+    "product": {
+      "id": 178123457,
+      "name": "Наушники Example Buds",
+      "currency": "RUB",
+      "availability": "unavailable",
+      "inStock": false,
+      "supplierName": "Example Store",
+      "imageUrl": "https://images.wbstatic.net/example-buds.jpg"
+    }
+  }
+]

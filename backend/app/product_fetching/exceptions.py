@@ -1,3 +1,7 @@
+from collections.abc import Mapping
+from typing import Any
+
+
 class ProductFetchError(Exception):
     """Base class for provider-neutral product fetching errors."""
 
@@ -11,12 +15,14 @@ class ProductFetchError(Exception):
         error_code: str | None = None,
         retryable: bool | None = None,
         provider_name: str | None = None,
+        raw_payload: Mapping[str, Any] | None = None,
     ):
         super().__init__(message)
         self.error_message = message
         self.error_code = error_code or self.error_code
         self.retryable = self.retryable if retryable is None else retryable
         self.provider_name = provider_name
+        self.raw_payload = dict(raw_payload or {})
 
 
 class UnsupportedProductUrlError(ProductFetchError):
@@ -47,6 +53,10 @@ class ProviderBlockedError(ProviderRequestError):
 
 class ProviderPayloadError(ProductFetchError):
     error_code = "provider_payload_error"
+
+
+class PageStructureChangedError(ProviderPayloadError):
+    error_code = "page_structure_changed"
 
 
 class ProductNotFoundError(ProductFetchError):

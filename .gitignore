@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 tests/**/*.py
+!tests/unit/test_apify_wildberries_adapter.py
 !tests/unit/test_url_normalization.py
 !tests/unit/test_product_fetching.py
 .mypy_cache/

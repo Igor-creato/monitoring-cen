@@ -1,0 +1,20 @@
+[
+  {
+    "url": "https://www.wildberries.ru/catalog/178123456/detail.aspx",
+    "httpStatus": 200,
+    "product": {
+      "id": 178123456,
+      "name": "Смартфон Example X 256 ГБ",
+      "salePriceU": 7999000,
+      "priceU": 8999000,
+      "currency": "RUB",
+      "availability": "in_stock",
+      "supplier": {
+        "name": "Example Store"
+      },
+      "images": [
+        "https://images.wbstatic.net/example-x.jpg"
+      ]
+    }
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://www.wildberries.ru/catalog/178123458/detail.aspx",
+    "httpStatus": 200,
+    "payloadVersion": "unknown-layout-v99",
+    "htmlTitle": "Wildberries",
+    "widgets": [
+      {
+        "kind": "unexpected-card",
+        "body": "The actor returned a layout that does not expose product fields anymore"
+      }
+    ]
+  }
+]
