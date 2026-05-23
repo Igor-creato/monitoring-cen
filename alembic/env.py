@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
+from app.infra.config import get_settings
+from app.infra.db import models  # noqa: F401
+from app.infra.db.base import Base
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.infra.config import get_settings
-from app.infra.db.base import Base
-from app.infra.db import models  # noqa: F401
+from alembic import context
 
 config = context.config
 

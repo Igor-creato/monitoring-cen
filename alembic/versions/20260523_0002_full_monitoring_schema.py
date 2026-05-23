@@ -5,15 +5,16 @@ Revises: 20260523_0001
 Create Date: 2026-05-23 00:10:00.000000
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = "20260523_0002"
-down_revision: Union[str, None] = "20260523_0001"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "20260523_0001"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 marketplace_enum = sa.Enum(
@@ -265,9 +266,9 @@ def upgrade() -> None:
         sa.column("dedupe_key", sa.String(length=128)),
     )
     op.get_bind().execute(
-        notifications.update().where(notifications.c.dedupe_key.is_(None)).values(
-            dedupe_key=sa.literal("legacy:") + sa.cast(notifications.c.id, sa.String(32))
-        )
+        notifications.update()
+        .where(notifications.c.dedupe_key.is_(None))
+        .values(dedupe_key=sa.literal("legacy:") + sa.cast(notifications.c.id, sa.String(32)))
     )
     op.alter_column("notifications", "dedupe_key", nullable=False)
     op.create_foreign_key(
