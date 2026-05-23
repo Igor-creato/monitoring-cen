@@ -13,12 +13,20 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         debug=settings.app_debug,
+        version="0.1.0",
+        description="MVP API for monitoring product prices by URL.",
     )
 
     install_error_handlers(app)
-    app.include_router(v1_router, prefix="/api/v1")
+    app.include_router(v1_router)
+    app.include_router(v1_router, prefix="/api/v1", include_in_schema=False)
 
-    @app.get("/health", tags=["health"])
+    @app.get(
+        "/health",
+        tags=["health"],
+        summary="Health check",
+        description="Returns service liveness status.",
+    )
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 

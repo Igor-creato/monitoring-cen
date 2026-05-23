@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://app:app@postgres:5432/app"
     redis_url: str = "redis://redis:6379/0"
 
+    jwt_secret_key: str = Field(default="change-me-in-production", repr=False)
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    password_hash_iterations: int = 260_000
+    internal_api_token: str | None = Field(default=None, repr=False)
+
     http_timeout_seconds: float = 15
     http_max_connections: int = 100
 

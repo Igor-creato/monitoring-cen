@@ -1,14 +1,25 @@
 from collections.abc import AsyncIterator
 
-from fastapi import Depends
+from fastapi import Depends, Header
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.exceptions import AuthenticationError, AuthorizationError
+from app.infra.config import Settings, get_settings
+from app.infra.db.models.user import UserModel
 from app.infra.db.session import async_session_factory
+from app.infra.security import decode_jwt
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.price_check_repository import PriceCheckRepository
+from app.repositories.product_repository import ProductRepository
+from app.repositories.user_repository import UserRepository
+from app.services.auth_service import AuthService
 from app.services.monitor_service import MonitorService
 from app.services.price_check_service import PriceCheckService
+from app.services.product_service import ProductService
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
@@ -34,6 +45,18 @@ def get_notification_repository(
     return NotificationRepository(session)
 
 
+def get_user_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> UserRepository:
+    return UserRepository(session)
+
+
+def get_product_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> ProductRepository:
+    return ProductRepository(session)
+
+
 def get_monitor_service(
     monitor_repository: MonitorRepository = Depends(get_monitor_repository),
 ) -> MonitorService:
@@ -45,3 +68,43 @@ def get_price_check_service(
     price_check_repository: PriceCheckRepository = Depends(get_price_check_repository),
 ) -> PriceCheckService:
     return PriceCheckService(monitor_repository, price_check_repository)
+
+
+def get_auth_service(
+    user_repository: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+) -> AuthService:
+    return AuthService(user_repository, settings)
+
+
+def get_product_service(
+    product_repository: ProductRepository = Depends(get_product_repository),
+    price_check_repository: PriceCheckRepository = Depends(get_price_check_repository),
+) -> ProductService:
+    return ProductService(product_repository, price_check_repository)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    user_repository: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+) -> UserModel:
+    if credentials is None:
+        raise AuthenticationError("Missing bearer token")
+
+    payload = decode_jwt(credentials.credentials, settings)
+    subject = payload.get("sub")
+    if not isinstance(subject, str) or not subject.isdigit():
+        raise AuthenticationError("Invalid access token")
+
+    return await user_repository.get_active_or_raise(int(subject))
+
+
+async def require_internal_token(
+    x_internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if settings.internal_api_token is None:
+        return
+    if x_internal_token != settings.internal_api_token:
+        raise AuthorizationError("Invalid internal API token")
