@@ -51,6 +51,15 @@ class MonitorRepository:
             raise EntityNotFoundError(f"Monitor {monitor_id} was not found")
         return monitor
 
+    async def get_for_update(self, monitor_id: int) -> MonitorModel | None:
+        result = await self.session.execute(
+            select(MonitorModel)
+            .where(MonitorModel.id == monitor_id)
+            .where(MonitorModel.deleted_at.is_(None))
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def get_for_user_or_raise(self, monitor_id: int, user_id: int) -> MonitorModel:
         result = await self.session.execute(
             select(MonitorModel)
@@ -132,3 +141,28 @@ class MonitorRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def claim_due(self, limit: int, lease_seconds: int) -> list[MonitorModel]:
+        now = datetime.now(UTC)
+        result = await self.session.execute(
+            select(MonitorModel)
+            .where(MonitorModel.status == MonitorStatus.ACTIVE)
+            .where(MonitorModel.deleted_at.is_(None))
+            .where(MonitorModel.next_check_at <= now)
+            .order_by(MonitorModel.next_check_at.asc(), MonitorModel.id.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        monitors = list(result.scalars().all())
+        for monitor in monitors:
+            monitor.next_check_at = now + timedelta(seconds=lease_seconds)
+        await self.session.commit()
+        return monitors
+
+    async def reschedule_after(self, monitor_id: int, delay_seconds: int) -> None:
+        monitor = await self.get_for_update(monitor_id)
+        if monitor is None or monitor.status != MonitorStatus.ACTIVE:
+            await self.session.rollback()
+            return
+        monitor.next_check_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
+        await self.session.commit()

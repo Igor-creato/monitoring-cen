@@ -9,10 +9,13 @@ class Marketplace(StrEnum):
 
 
 class MonitorStatus(StrEnum):
+    DRAFT = "draft"
     ACTIVE = "active"
     PAUSED = "paused"
+    TRIGGERED = "triggered"
     FAILED = "failed"
     ERROR = "error"
+    UNSUPPORTED = "unsupported"
     DISABLED = "disabled"
     DELETED = "deleted"
 

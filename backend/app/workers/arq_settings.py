@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from arq import cron
+from arq import cron, func
 from arq.connections import RedisSettings
 
 from app.infra.config import get_settings
@@ -23,15 +23,19 @@ settings = get_settings()
 
 class WorkerSettings:
     functions = [
-        run_monitor_check,
-        run_due_monitor_checks,
-        send_notification,
+        func(
+            run_monitor_check,
+            max_tries=settings.check_max_retries,
+            timeout=settings.check_lock_ttl_seconds,
+        ),
+        func(run_due_monitor_checks, max_tries=1, timeout=30),
+        func(send_notification, max_tries=settings.check_max_retries, timeout=60),
     ]
     redis_settings = redis_settings_from_url(settings.redis_url)
     on_startup = startup
     on_shutdown = shutdown
     cron_jobs = [
-        cron(run_due_monitor_checks, minute=None, second=0),
+        cron(run_due_monitor_checks, minute=None, second=0, max_tries=1),
     ]
     max_jobs = 20
     job_timeout = 120

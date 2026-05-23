@@ -1,10 +1,17 @@
+import hashlib
+from urllib.parse import urlparse
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.clock import utc_now
+from app.domain.enums import SourceStatus
 from app.domain.exceptions import EntityNotFoundError
 from app.infra.db.models.monitor import MonitorModel
 from app.infra.db.models.product import ProductModel
 from app.infra.db.models.product_source import ProductSourceModel
+from app.product_fetching.models import ProductSnapshot
 
 
 class ProductRepository:
@@ -34,3 +41,95 @@ class ProductRepository:
         if product is None:
             raise EntityNotFoundError(f"Product {product_id} was not found")
         return product
+
+    async def get_source_by_normalized_url(self, normalized_url: str) -> ProductSourceModel | None:
+        domain = _domain_from_url(normalized_url)
+        url_hash = _url_hash(normalized_url)
+        result = await self.session.execute(
+            select(ProductSourceModel)
+            .where(ProductSourceModel.domain == domain)
+            .where(ProductSourceModel.normalized_url_hash == url_hash)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_or_create_source(
+        self,
+        *,
+        original_url: str,
+        normalized_url: str,
+        snapshot: ProductSnapshot,
+    ) -> ProductSourceModel:
+        source = await self.get_source_by_normalized_url(normalized_url)
+        if source is not None:
+            return source
+
+        product = ProductModel(
+            marketplace=snapshot.marketplace,
+            title=snapshot.title,
+        )
+        source = ProductSourceModel(
+            product=product,
+            original_url=original_url,
+            normalized_url=normalized_url,
+            normalized_url_hash=_url_hash(normalized_url),
+            domain=_domain_from_url(normalized_url),
+            marketplace=snapshot.marketplace,
+            title=snapshot.title,
+        )
+        self.session.add(source)
+        try:
+            await self.session.flush()
+        except IntegrityError:
+            await self.session.rollback()
+            existing = await self.get_source_by_normalized_url(normalized_url)
+            if existing is None:
+                raise
+            return existing
+        return source
+
+    async def apply_success_snapshot(
+        self,
+        source: ProductSourceModel,
+        snapshot: ProductSnapshot,
+    ) -> None:
+        now = utc_now()
+        source.marketplace = snapshot.marketplace
+        source.title = snapshot.title or source.title
+        source.current_price = snapshot.current_price
+        source.old_price = snapshot.old_price
+        source.currency = snapshot.currency
+        source.availability = snapshot.availability
+        source.seller_name = snapshot.seller_name
+        source.status = SourceStatus.ACTIVE
+        source.last_checked_at = now
+        source.last_success_at = now
+        source.last_error_code = None
+        source.last_error_message = None
+        if source.product_id is not None:
+            product = await self.session.get(ProductModel, source.product_id)
+            if product is not None:
+                product.marketplace = snapshot.marketplace
+                product.title = snapshot.title or product.title
+
+    async def apply_failure_snapshot(
+        self,
+        source: ProductSourceModel | None,
+        snapshot: ProductSnapshot,
+    ) -> None:
+        if source is None:
+            return
+        now = utc_now()
+        source.status = SourceStatus.ERROR
+        source.last_checked_at = now
+        source.last_error_at = now
+        source.last_error_code = snapshot.error_code
+        source.last_error_message = snapshot.error_message
+
+
+def _url_hash(normalized_url: str) -> str:
+    return hashlib.sha256(normalized_url.encode("utf-8")).hexdigest()
+
+
+def _domain_from_url(normalized_url: str) -> str:
+    parsed = urlparse(normalized_url)
+    return (parsed.hostname or "").lower()

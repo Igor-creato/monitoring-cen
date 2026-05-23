@@ -7,6 +7,7 @@ from app.domain.enums import CheckStatus
 from app.infra.db.models.monitor import MonitorModel
 from app.infra.db.models.price_check import PriceCheckModel
 from app.infra.db.models.product_source import ProductSourceModel
+from app.product_fetching.models import ProductSnapshot
 
 
 class PriceCheckRepository:
@@ -82,3 +83,45 @@ class PriceCheckRepository:
         await self.session.commit()
         await self.session.refresh(check)
         return check
+
+    async def add_from_snapshot(
+        self,
+        *,
+        monitor_id: int,
+        product_source_id: int | None,
+        snapshot: ProductSnapshot,
+        status: CheckStatus | None = None,
+    ) -> PriceCheckModel:
+        check = PriceCheckModel(
+            monitor_id=monitor_id,
+            product_source_id=product_source_id,
+            status=status or _status_from_snapshot(snapshot),
+            price=snapshot.current_price,
+            old_price=snapshot.old_price,
+            currency=snapshot.currency,
+            availability=snapshot.availability,
+            seller_name=snapshot.seller_name,
+            title=snapshot.title,
+            error_code=snapshot.error_code,
+            error_message=snapshot.error_message,
+            checked_at=snapshot.fetched_at,
+        )
+        self.session.add(check)
+        await self.session.flush()
+        return check
+
+
+def _status_from_snapshot(snapshot: ProductSnapshot) -> CheckStatus:
+    if snapshot.success and snapshot.current_price is not None:
+        return CheckStatus.SUCCESS
+    if snapshot.success:
+        return CheckStatus.PARSE_ERROR
+
+    error_code = snapshot.error_code or ""
+    if "timeout" in error_code:
+        return CheckStatus.TIMEOUT
+    if error_code in {"captcha_detected", "blocked", "access_denied"}:
+        return CheckStatus.BLOCKED
+    if "network" in error_code:
+        return CheckStatus.NETWORK_ERROR
+    return CheckStatus.FAILED

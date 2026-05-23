@@ -1,20 +1,100 @@
+import hashlib
+import json
 from typing import Any
 
+import structlog
+from arq import Retry
+
+from app.domain.enums import MonitorStatus, NotificationStatus
+from app.infra.redis_lock import acquire_redis_lock
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.price_check_repository import PriceCheckRepository
+from app.repositories.product_repository import ProductRepository
 from app.services.notification_service import NotificationService
 from app.services.price_check_service import PriceCheckService
 
+logger = structlog.get_logger(__name__)
+
 
 async def run_monitor_check(ctx: dict[str, Any], monitor_id: int) -> None:
+    settings = ctx["settings"]
+    redis = ctx["redis"]
     session_factory = ctx["session_factory"]
+
     async with session_factory() as session:
-        service = PriceCheckService(
-            monitor_repository=MonitorRepository(session),
-            price_check_repository=PriceCheckRepository(session),
-        )
-        await service.run_check(monitor_id)
+        monitor = await MonitorRepository(session).get(monitor_id)
+        if monitor is None:
+            logger.info("Monitor check skipped: monitor missing", monitor_id=monitor_id)
+            return
+        if monitor.status != MonitorStatus.ACTIVE:
+            logger.info(
+                "Monitor check skipped: monitor is not active",
+                monitor_id=monitor_id,
+                status=monitor.status,
+            )
+            return
+        lock_key = _price_check_lock_key(monitor.url)
+
+    async with acquire_redis_lock(
+        redis,
+        key=lock_key,
+        ttl_seconds=settings.check_lock_ttl_seconds,
+    ) as lock:
+        if lock is None:
+            async with session_factory() as session:
+                await MonitorRepository(session).reschedule_after(
+                    monitor_id,
+                    settings.check_lock_retry_delay_seconds,
+                )
+            logger.info(
+                "Monitor check skipped: URL lock is already held",
+                monitor_id=monitor_id,
+                lock_key=lock_key,
+            )
+            return
+
+        try:
+            async with session_factory() as session:
+                service = PriceCheckService(
+                    monitor_repository=MonitorRepository(session),
+                    price_check_repository=PriceCheckRepository(session),
+                    product_repository=ProductRepository(session),
+                    notification_repository=NotificationRepository(session),
+                    product_provider=ctx["product_provider"],
+                )
+                result = await service.run_check_with_result(monitor_id)
+
+            for notification_id in result.notification_ids:
+                await redis.enqueue_job(
+                    "send_notification",
+                    notification_id,
+                    _job_id=f"send_notification:{notification_id}",
+                )
+
+            logger.info(
+                "Monitor check completed",
+                monitor_id=monitor_id,
+                check_id=result.check.id,
+                notification_ids=result.notification_ids,
+            )
+        except Exception as exc:
+            if _is_final_try(ctx, settings.check_max_retries):
+                await _dead_letter(
+                    redis,
+                    "dead:price_checks",
+                    {
+                        "job": "run_monitor_check",
+                        "monitor_id": monitor_id,
+                        "error": exc.__class__.__name__,
+                        "message": str(exc),
+                        "job_try": ctx.get("job_try"),
+                    },
+                    settings.dead_letter_max_items,
+                )
+                await _mark_monitor_error(ctx, monitor_id, exc)
+            logger.exception("Monitor check failed", monitor_id=monitor_id)
+            raise
 
 
 async def run_due_monitor_checks(ctx: dict[str, Any]) -> None:
@@ -24,19 +104,126 @@ async def run_due_monitor_checks(ctx: dict[str, Any]) -> None:
 
     async with session_factory() as session:
         repository = MonitorRepository(session)
-        monitors = await repository.list_due(settings.check_batch_size)
+        monitors = await repository.claim_due(
+            settings.check_batch_size,
+            settings.check_lock_ttl_seconds,
+        )
 
     for monitor in monitors:
-        await redis.enqueue_job("run_monitor_check", monitor.id)
+        job = await redis.enqueue_job(
+            "run_monitor_check",
+            monitor.id,
+            _job_id=f"run_monitor_check:{monitor.id}:{int(monitor.next_check_at.timestamp())}",
+        )
+        if job is None:
+            logger.info("Due monitor already enqueued", monitor_id=monitor.id)
+
+    logger.info("Due monitors scheduled", count=len(monitors))
 
 
 async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
+    settings = ctx["settings"]
+    redis = ctx["redis"]
     session_factory = ctx["session_factory"]
+
     async with session_factory() as session:
         repository = NotificationRepository(session)
-        _ = repository
+        notification = await repository.get_for_update(notification_id)
+        if notification is None:
+            logger.info("Notification skipped: missing", notification_id=notification_id)
+            return
+        if notification.status == NotificationStatus.SENT:
+            logger.info("Notification skipped: already sent", notification_id=notification_id)
+            return
+        if notification.status not in {
+            NotificationStatus.PENDING,
+            NotificationStatus.FAILED,
+            NotificationStatus.PROCESSING,
+        }:
+            logger.info(
+                "Notification skipped: status is not deliverable",
+                notification_id=notification_id,
+                status=notification.status,
+            )
+            return
+        await repository.mark_processing(notification)
+
         service = NotificationService(senders={})
-        _ = service
-        raise NotImplementedError(
-            f"Notification delivery is not implemented yet: {notification_id}"
-        )
+        try:
+            await service.send(notification.channel, notification.payload)
+        except KeyError as exc:
+            await repository.mark_failed(
+                notification,
+                error_code="notification_channel_not_configured",
+                error_message=f"Notification channel is not configured: {notification.channel}",
+            )
+            await _dead_letter(
+                redis,
+                "dead:notifications",
+                {
+                    "job": "send_notification",
+                    "notification_id": notification_id,
+                    "channel": notification.channel,
+                    "error": exc.__class__.__name__,
+                    "message": str(exc),
+                },
+                settings.dead_letter_max_items,
+            )
+            logger.warning(
+                "Notification delivery skipped: channel is not configured",
+                notification_id=notification_id,
+                channel=notification.channel,
+            )
+            return
+        except Exception as exc:
+            if _is_final_try(ctx, settings.check_max_retries):
+                await repository.mark_failed(
+                    notification,
+                    error_code=exc.__class__.__name__,
+                    error_message=str(exc),
+                )
+                await _dead_letter(
+                    redis,
+                    "dead:notifications",
+                    {
+                        "job": "send_notification",
+                        "notification_id": notification_id,
+                        "channel": notification.channel,
+                        "error": exc.__class__.__name__,
+                        "message": str(exc),
+                        "job_try": ctx.get("job_try"),
+                    },
+                    settings.dead_letter_max_items,
+                )
+            logger.exception("Notification delivery failed", notification_id=notification_id)
+            raise Retry(defer=30) from exc
+
+        await repository.mark_sent(notification)
+        logger.info("Notification sent", notification_id=notification_id)
+
+
+def _price_check_lock_key(url: str) -> str:
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return f"lock:price_check:url:{digest}"
+
+
+async def _dead_letter(redis, key: str, payload: dict[str, Any], max_items: int) -> None:
+    await redis.lpush(key, json.dumps(payload, sort_keys=True, default=str))
+    await redis.ltrim(key, 0, max_items - 1)
+
+
+def _is_final_try(ctx: dict[str, Any], max_tries: int) -> bool:
+    return int(ctx.get("job_try") or 1) >= max_tries
+
+
+async def _mark_monitor_error(ctx: dict[str, Any], monitor_id: int, exc: Exception) -> None:
+    session_factory = ctx["session_factory"]
+    async with session_factory() as session:
+        monitor = await MonitorRepository(session).get_for_update(monitor_id)
+        if monitor is None:
+            return
+        monitor.status = MonitorStatus.ERROR
+        monitor.error_code = exc.__class__.__name__
+        monitor.error_reason = str(exc)[:255]
+        monitor.next_check_at = None
+        await session.commit()

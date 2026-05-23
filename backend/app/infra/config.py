@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     check_default_interval_seconds: int = 3600
     check_batch_size: int = 100
     check_max_retries: int = 3
+    check_lock_ttl_seconds: int = 180
+    check_lock_retry_delay_seconds: int = 60
+    check_scheduler_tick_seconds: int = 60
+    dead_letter_max_items: int = 1000
 
     telegram_bot_token: str | None = None
     email_smtp_host: str | None = None
