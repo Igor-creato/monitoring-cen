@@ -1,8 +1,7 @@
-from urllib.parse import urlparse
-
 import httpx
 
 from app.domain.enums import Marketplace
+from app.domain.url_normalization import normalize_product_url
 from app.parsers.exceptions import ParseMarkupError
 from app.parsers.result import ParsedProduct
 
@@ -14,7 +13,8 @@ class OzonParser:
         self.http_client = http_client
 
     def supports(self, url: str) -> bool:
-        return "ozon.ru" in urlparse(url).netloc.lower()
+        normalized = normalize_product_url(url)
+        return normalized.is_supported and normalized.marketplace == self.marketplace
 
     async def parse(self, url: str) -> ParsedProduct:
         raise ParseMarkupError("Ozon parser is not implemented yet")

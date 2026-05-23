@@ -1,5 +1,7 @@
 from app.api.v1.schemas.monitor import MonitorCreateRequest, MonitorUpdateRequest
 from app.domain.enums import MonitorStatus
+from app.domain.exceptions import UnsupportedMarketplaceError
+from app.domain.url_normalization import normalize_product_url
 from app.infra.db.models.monitor import MonitorModel
 from app.repositories.monitor_repository import MonitorRepository
 
@@ -9,9 +11,16 @@ class MonitorService:
         self.monitor_repository = monitor_repository
 
     async def create_monitor(self, user_id: int, payload: MonitorCreateRequest) -> MonitorModel:
+        normalized = normalize_product_url(str(payload.url))
+        if not normalized.is_supported or normalized.normalized_url is None:
+            raise UnsupportedMarketplaceError(
+                normalized.reason_if_invalid or "Unsupported marketplace URL"
+            )
+
         return await self.monitor_repository.create(
             user_id=user_id,
-            url=str(payload.url),
+            url=normalized.normalized_url,
+            marketplace=normalized.marketplace,
             target_price=payload.target_price,
             check_interval_seconds=payload.check_interval_seconds,
             notification_channel=payload.notification_channel,
