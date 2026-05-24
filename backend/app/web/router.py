@@ -22,7 +22,7 @@ from app.api.deps import (
 )
 from app.api.v1.schemas.auth import LoginRequest, RegisterRequest
 from app.api.v1.schemas.monitor import MonitorCreateRequest, MonitorUpdateRequest
-from app.domain.enums import MonitorStatus
+from app.domain.enums import AvailabilityStatus, CheckStatus, Marketplace, MonitorStatus
 from app.domain.exceptions import (
     AuthenticationError,
     ConflictError,
@@ -45,6 +45,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 AUTH_COOKIE = "pm_access_token"
 CSRF_COOKIE = "pm_csrf_token"
+AVAILABLE_MONITOR_MARKETPLACES = (Marketplace.WILDBERRIES,)
 
 router = APIRouter(include_in_schema=False)
 
@@ -193,7 +194,11 @@ async def monitor_new_page(
         {
             "title": "Новый мониторинг",
             "user": user,
-            "form": {"notification_channel": user.default_notification_channel or ""},
+            "form": {
+                "marketplace": Marketplace.WILDBERRIES.value,
+                "notification_channel": user.default_notification_channel or "",
+            },
+            "marketplaces": AVAILABLE_MONITOR_MARKETPLACES,
         },
         settings,
     )
@@ -202,6 +207,7 @@ async def monitor_new_page(
 @router.post("/monitors", response_class=HTMLResponse)
 async def monitor_create(
     request: Request,
+    marketplace: str = Form(Marketplace.WILDBERRIES.value),
     url: str = Form(...),
     target_price: str = Form(""),
     check_interval_seconds: int = Form(3600),
@@ -213,6 +219,7 @@ async def monitor_create(
 ) -> Response:
     user = await _require_user(request, users, settings)
     form = {
+        "marketplace": marketplace,
         "url": url,
         "target_price": target_price,
         "check_interval_seconds": check_interval_seconds,
@@ -234,6 +241,7 @@ async def monitor_create(
             channel = user.default_notification_channel
         payload = MonitorCreateRequest(
             url=url.strip(),
+            marketplace=_parse_marketplace(marketplace),
             target_price=_optional_decimal(target_price),
             check_interval_seconds=check_interval_seconds,
             notification_channel=channel if user.notifications_enabled else None,
@@ -453,6 +461,7 @@ def _render(
             "current_path": request.url.path,
             "error": None,
             "form": {},
+            "marketplaces": AVAILABLE_MONITOR_MARKETPLACES,
             **context,
         },
         status_code=status_code,
@@ -579,6 +588,16 @@ def _clean_channel(value: str) -> str | None:
     return value or None
 
 
+def _parse_marketplace(value: str) -> Marketplace:
+    try:
+        marketplace = Marketplace(value.strip())
+    except ValueError as exc:
+        raise ValueError("Выбранный маркетплейс не поддерживается") from exc
+    if marketplace not in AVAILABLE_MONITOR_MARKETPLACES:
+        raise ValueError("Выбранный маркетплейс пока недоступен для мониторинга")
+    return marketplace
+
+
 def _monitor_stats(monitors: list[MonitorModel]) -> dict[str, int]:
     return {
         "active": sum(1 for item in monitors if item.status == MonitorStatus.ACTIVE),
@@ -627,9 +646,81 @@ def _interval_label(seconds: int | None) -> str:
     return f"{seconds // 86_400} дн"
 
 
+MONITOR_STATUS_LABELS = {
+    MonitorStatus.DRAFT: "Черновик",
+    MonitorStatus.ACTIVE: "Активен",
+    MonitorStatus.PAUSED: "На паузе",
+    MonitorStatus.TRIGGERED: "Сработал",
+    MonitorStatus.FAILED: "Сбой",
+    MonitorStatus.ERROR: "Ошибка",
+    MonitorStatus.UNSUPPORTED: "Не поддерживается",
+    MonitorStatus.DISABLED: "Отключен",
+    MonitorStatus.DELETED: "Удален",
+}
+
+CHECK_STATUS_LABELS = {
+    CheckStatus.SUCCESS: "Успешно",
+    CheckStatus.FAILED: "Сбой",
+    CheckStatus.NOT_MODIFIED: "Без изменений",
+    CheckStatus.BLOCKED: "Заблокировано",
+    CheckStatus.TIMEOUT: "Таймаут",
+    CheckStatus.PARSE_ERROR: "Ошибка разбора",
+    CheckStatus.NETWORK_ERROR: "Ошибка сети",
+}
+
+AVAILABILITY_LABELS = {
+    AvailabilityStatus.IN_STOCK: "В наличии",
+    AvailabilityStatus.OUT_OF_STOCK: "Нет в наличии",
+    AvailabilityStatus.PREORDER: "Предзаказ",
+    AvailabilityStatus.UNKNOWN: "Неизвестно",
+    AvailabilityStatus.UNAVAILABLE: "Недоступно",
+}
+
+MARKETPLACE_LABELS = {
+    Marketplace.WILDBERRIES: "Wildberries",
+    Marketplace.OZON: "Ozon",
+    Marketplace.YANDEX_MARKET: "Яндекс Маркет",
+    Marketplace.UNKNOWN: "Неизвестно",
+}
+
+
+def _enum_label(value: Any, labels: dict[Any, str]) -> str:
+    if value is None:
+        return "Не задан"
+    if value in labels:
+        return labels[value]
+    for enum_value, label in labels.items():
+        if getattr(enum_value, "value", None) == value:
+            return label
+    try:
+        return labels[value.__class__(value)]
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def _monitor_status_label(value: Any) -> str:
+    return _enum_label(value, MONITOR_STATUS_LABELS)
+
+
+def _check_status_label(value: Any) -> str:
+    return _enum_label(value, CHECK_STATUS_LABELS)
+
+
+def _availability_label(value: Any) -> str:
+    return _enum_label(value, AVAILABILITY_LABELS)
+
+
+def _marketplace_label(value: Any) -> str:
+    return _enum_label(value, MARKETPLACE_LABELS)
+
+
 templates.env.filters["money"] = _format_money
 templates.env.filters["dt"] = _format_dt
 templates.env.filters["interval"] = _interval_label
+templates.env.filters["monitor_status_label"] = _monitor_status_label
+templates.env.filters["check_status_label"] = _check_status_label
+templates.env.filters["availability_label"] = _availability_label
+templates.env.filters["marketplace_label"] = _marketplace_label
 
 
 class WebRedirect(Exception):

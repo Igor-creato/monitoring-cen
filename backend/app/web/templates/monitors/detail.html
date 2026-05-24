@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-head">
   <div>
-    <p class="eyebrow">{{ monitor.marketplace.value if monitor.marketplace else 'marketplace' }}</p>
+    <p class="eyebrow">{{ monitor.marketplace|marketplace_label }}</p>
     <h1>Мониторинг #{{ monitor.id }}</h1>
   </div>
   <div class="actions">
@@ -24,7 +24,7 @@
     </div>
     <dl class="facts">
       <div><dt>Цель</dt><dd>{{ monitor.target_price|money }}</dd></div>
-      <div><dt>Статус</dt><dd><span class="badge">{{ monitor.status.value }}</span></dd></div>
+      <div><dt>Статус</dt><dd><span class="badge">{{ monitor.status|monitor_status_label }}</span></dd></div>
       <div><dt>Последняя проверка</dt><dd>{{ monitor.last_checked_at|dt }}</dd></div>
       <div><dt>Следующая проверка</dt><dd>{{ monitor.next_check_at|dt }}</dd></div>
       <div><dt>Канал</dt><dd>{{ monitor.notification_channel or 'Не задан' }}</dd></div>
@@ -62,7 +62,7 @@
       <span>Статус</span>
       <select name="status">
         {% for item in statuses %}
-          <option value="{{ item.value }}" {{ 'selected' if monitor.status == item else '' }}>{{ item.value }}</option>
+          <option value="{{ item.value }}" {{ 'selected' if monitor.status == item else '' }}>{{ item|monitor_status_label }}</option>
         {% endfor %}
       </select>
     </label>
@@ -95,7 +95,7 @@
           <tr>
             <td>{{ check.checked_at|dt }}</td>
             <td>{{ check.price|money(check.currency) }}</td>
-            <td><span class="badge">{{ check.status.value }}</span></td>
+            <td><span class="badge">{{ check.status|check_status_label }}</span></td>
             <td>{{ check.error_message or '—' }}</td>
           </tr>
         {% endfor %}

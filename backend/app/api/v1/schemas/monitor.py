@@ -8,6 +8,10 @@ from app.domain.enums import Marketplace, MonitorStatus
 
 class MonitorCreateRequest(BaseModel):
     url: HttpUrl = Field(description="Product URL from a supported marketplace")
+    marketplace: Marketplace | None = Field(
+        default=None,
+        description="Optional expected marketplace. If set, it must match the URL.",
+    )
     target_price: Decimal | None = Field(
         default=None,
         gt=0,

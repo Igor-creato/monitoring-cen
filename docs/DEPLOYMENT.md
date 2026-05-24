@@ -21,6 +21,29 @@ Run smoke tests:
 sh ./scripts/smoke.sh http://localhost:8000
 ```
 
+Use the real Wildberries provider locally:
+
+```bash
+cp .env.local.example .env.local
+# edit .env.local:
+# PRODUCT_FETCH_PROVIDER=apify
+# APIFY_API_TOKEN=<token>
+# APIFY_ACTOR_ID=<actor>
+docker compose --env-file .env.local up --build
+```
+
+After registration at `http://localhost:8000`, add a Wildberries product URL. The worker
+checks due monitors automatically every minute. To force a check, set `INTERNAL_API_TOKEN`
+in `.env.local` and call:
+
+```bash
+curl -X POST \
+  -H "X-Internal-Token: $INTERNAL_API_TOKEN" \
+  http://localhost:8000/internal/check-monitor/<monitor_id>
+```
+
+The production Apify adapter currently supports Wildberries only.
+
 ## Production
 
 Prepare VPS:

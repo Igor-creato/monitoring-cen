@@ -25,7 +25,7 @@ Base paths are exposed at `/` and, for compatibility, at `/api/v1` without OpenA
 
 `TokenResponse`: `access_token`, `token_type`, `expires_at`, `user`.
 
-`MonitorCreateRequest`: `url`, optional `target_price`, `check_interval_seconds`, optional `notification_channel`.
+`MonitorCreateRequest`: `url`, optional `marketplace`, optional `target_price`, `check_interval_seconds`, optional `notification_channel`. If `marketplace` is provided, it must match the marketplace detected from the URL.
 
 `MonitorUpdateRequest`: optional `target_price`, `check_interval_seconds`, `notification_channel`, `status`.
 

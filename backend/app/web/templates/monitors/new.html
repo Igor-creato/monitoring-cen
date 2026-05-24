@@ -16,9 +16,20 @@
   {% endif %}
 
   <label class="field">
+    <span>Маркетплейс</span>
+    <select name="marketplace" required>
+      {% set selected_marketplace = form.marketplace or 'wildberries' %}
+      {% for item in marketplaces %}
+        <option value="{{ item.value }}" {{ 'selected' if selected_marketplace == item.value else '' }}>{{ item|marketplace_label }}</option>
+      {% endfor %}
+    </select>
+    <small>Сейчас доступен мониторинг Wildberries.</small>
+  </label>
+
+  <label class="field">
     <span>Ссылка на товар</span>
     <input name="url" type="url" required placeholder="https://..." value="{{ form.url or '' }}">
-    <small>Поддерживаются Ozon, Wildberries и Яндекс Маркет.</small>
+    <small>Ссылка должна вести на карточку товара выбранного маркетплейса.</small>
   </label>
 
   <div class="form-grid">

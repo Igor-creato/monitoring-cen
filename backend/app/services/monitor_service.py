@@ -16,6 +16,8 @@ class MonitorService:
             raise UnsupportedMarketplaceError(
                 normalized.reason_if_invalid or "Unsupported marketplace URL"
             )
+        if payload.marketplace is not None and payload.marketplace != normalized.marketplace:
+            raise UnsupportedMarketplaceError("Ссылка не относится к выбранному маркетплейсу")
 
         return await self.monitor_repository.create(
             user_id=user_id,

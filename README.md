@@ -26,6 +26,31 @@ API will be available at:
 http://localhost:8000
 ```
 
+## Real Wildberries Monitoring
+
+Local config uses `PRODUCT_FETCH_PROVIDER=mock` by default. To check real product pages:
+
+1. Copy `.env.local.example` to `.env.local`.
+2. Set `PRODUCT_FETCH_PROVIDER=apify`.
+3. Fill `APIFY_API_TOKEN` and `APIFY_ACTOR_ID`.
+4. Optionally set `INTERNAL_API_TOKEN` if you want to run manual checks through the internal API.
+5. Start the stack:
+
+```bash
+docker compose --env-file .env.local up --build
+```
+
+Open `http://localhost:8000`, register, and add a Wildberries product URL. The worker
+claims due monitors every minute. For a manual check, use the created monitor id:
+
+```bash
+curl -X POST \
+  -H "X-Internal-Token: $INTERNAL_API_TOKEN" \
+  http://localhost:8000/internal/check-monitor/<monitor_id>
+```
+
+The production Apify adapter currently supports Wildberries only.
+
 ## Deployment
 
 Production, backup, VPS, config, and smoke-test commands live in:

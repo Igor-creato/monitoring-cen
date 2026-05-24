@@ -30,7 +30,7 @@
     <select name="status" onchange="this.form.submit()">
       <option value="">Все</option>
       {% for item in statuses %}
-        <option value="{{ item.value }}" {{ 'selected' if status_filter == item else '' }}>{{ item.value }}</option>
+        <option value="{{ item.value }}" {{ 'selected' if status_filter == item else '' }}>{{ item|monitor_status_label }}</option>
       {% endfor %}
     </select>
   </label>
@@ -56,7 +56,7 @@
           <strong>{{ monitor.target_price|money }}</strong>
         </div>
         <div class="row-meta">
-          <span class="badge">{{ monitor.status.value }}</span>
+          <span class="badge">{{ monitor.status|monitor_status_label }}</span>
           <span>{{ monitor.check_interval_seconds|interval }}</span>
         </div>
       </article>
