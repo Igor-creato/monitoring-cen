@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, String
+from sqlalchemy import Boolean, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.enums import UserStatus
@@ -14,6 +14,8 @@ class UserModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    default_notification_channel: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus, native_enum=False, values_callable=enum_values),
         default=UserStatus.ACTIVE,

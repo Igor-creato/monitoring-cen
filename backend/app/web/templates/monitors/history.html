@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ total }} записей</p>
+    <h1>История цены #{{ monitor.id }}</h1>
+  </div>
+  <a class="button button-secondary" href="/monitors/{{ monitor.id }}">К карточке</a>
+</section>
+
+{% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Цена</th>
+          <th>Старая цена</th>
+          <th>Наличие</th>
+          <th>Статус</th>
+          <th>Детали</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for check in history %}
+          <tr>
+            <td>{{ check.checked_at|dt }}</td>
+            <td>{{ check.price|money(check.currency) }}</td>
+            <td>{{ check.old_price|money(check.currency) }}</td>
+            <td>{{ check.availability.value }}</td>
+            <td><span class="badge">{{ check.status.value }}</span></td>
+            <td>{{ check.error_message or check.title or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <section class="empty-state">
+    <h2>Истории еще нет</h2>
+    <p>Мониторинг создан, но проверка цены еще не записала результат.</p>
+  </section>
+{% endif %}
+{% endblock %}

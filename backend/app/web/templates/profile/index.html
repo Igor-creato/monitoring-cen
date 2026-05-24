@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ user.email }}</p>
+    <h1>Профиль</h1>
+  </div>
+  <a class="button button-secondary" href="/monitors">К мониторингам</a>
+</section>
+
+{% if request.query_params.get('saved') %}
+  <div class="alert alert-success" role="status">Настройки сохранены.</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+  <div class="alert alert-error" role="alert">Не удалось сохранить настройки.</div>
+{% endif %}
+
+<section class="detail-grid">
+  <article class="summary-panel">
+    <h2>Аккаунт</h2>
+    <dl class="facts">
+      <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+      <div><dt>Статус</dt><dd><span class="badge">{{ user.status.value }}</span></dd></div>
+      <div><dt>Создан</dt><dd>{{ user.created_at|dt }}</dd></div>
+      <div><dt>Мониторингов</dt><dd>{{ monitors_count }}</dd></div>
+    </dl>
+    {% if channels %}
+      <p class="muted">Используемые каналы: {{ channels|join(', ') }}</p>
+    {% else %}
+      <p class="muted">Каналы уведомлений пока не заданы.</p>
+    {% endif %}
+  </article>
+
+  <form method="post" action="/profile" class="form-panel" data-loading novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Уведомления</h2>
+
+    <label class="toggle-field">
+      <input name="notifications_enabled" type="checkbox" {{ 'checked' if user.notifications_enabled else '' }}>
+      <span>Включить уведомления для новых мониторингов</span>
+    </label>
+
+    <label class="field">
+      <span>Канал по умолчанию</span>
+      <input name="default_notification_channel" maxlength="64" placeholder="email или telegram" value="{{ user.default_notification_channel or '' }}">
+      <small>Используется при создании мониторинга, если канал в форме не указан.</small>
+    </label>
+
+    <button class="button button-primary" type="submit">
+      <span class="button-label">Сохранить настройки</span>
+      <span class="spinner" aria-hidden="true"></span>
+    </button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Всего {{ total }}</p>
+    <h1>Мониторинги</h1>
+  </div>
+  <a class="button button-primary" href="/monitors/new">+ Добавить</a>
+</section>
+
+<section class="metrics" aria-label="Сводка">
+  <div class="metric">
+    <span>Активные</span>
+    <strong>{{ stats.active }}</strong>
+  </div>
+  <div class="metric">
+    <span>На паузе</span>
+    <strong>{{ stats.paused }}</strong>
+  </div>
+  <div class="metric">
+    <span>Ошибки</span>
+    <strong>{{ stats.errors }}</strong>
+  </div>
+</section>
+
+<form method="get" action="/monitors" class="toolbar">
+  <label class="select-field">
+    <span>Статус</span>
+    <select name="status" onchange="this.form.submit()">
+      <option value="">Все</option>
+      {% for item in statuses %}
+        <option value="{{ item.value }}" {{ 'selected' if status_filter == item else '' }}>{{ item.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+{% if monitors %}
+  <section class="monitor-list" aria-label="Список мониторингов">
+    {% for monitor in monitors %}
+      <article class="monitor-row">
+        <div class="row-main">
+          <div class="row-title">
+            <span class="status-dot status-{{ monitor.status.value }}"></span>
+            <a href="/monitors/{{ monitor.id }}">Мониторинг #{{ monitor.id }}</a>
+          </div>
+          <a class="url-line" href="{{ monitor.url }}" target="_blank" rel="noreferrer">{{ monitor.url }}</a>
+        </div>
+        <div class="row-price">
+          <span>Текущая</span>
+          <strong>{{ monitor.last_price|money }}</strong>
+        </div>
+        <div class="row-price">
+          <span>Цель</span>
+          <strong>{{ monitor.target_price|money }}</strong>
+        </div>
+        <div class="row-meta">
+          <span class="badge">{{ monitor.status.value }}</span>
+          <span>{{ monitor.check_interval_seconds|interval }}</span>
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="empty-state">
+    <h2>Пока нет мониторингов</h2>
+    <p>Добавьте ссылку на товар, целевую цену и канал уведомления. История появится после первой проверки.</p>
+    <a class="button button-primary" href="/monitors/new">Добавить мониторинг</a>
+  </section>
+{% endif %}
+{% endblock %}

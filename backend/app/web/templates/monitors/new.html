@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Новая задача</p>
+    <h1>Добавить мониторинг</h1>
+  </div>
+  <a class="button button-secondary" href="/monitors">Назад</a>
+</section>
+
+<form method="post" action="/monitors" class="form-panel wide-form" data-loading novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if error %}
+    <div class="alert alert-error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <label class="field">
+    <span>Ссылка на товар</span>
+    <input name="url" type="url" required placeholder="https://..." value="{{ form.url or '' }}">
+    <small>Поддерживаются Ozon, Wildberries и Яндекс Маркет.</small>
+  </label>
+
+  <div class="form-grid">
+    <label class="field">
+      <span>Целевая цена</span>
+      <input name="target_price" inputmode="decimal" placeholder="3490" value="{{ form.target_price or '' }}">
+      <small>Можно оставить пустой.</small>
+    </label>
+
+    <label class="field">
+      <span>Интервал проверки</span>
+      <select name="check_interval_seconds">
+        {% set selected_interval = form.check_interval_seconds or 3600 %}
+        <option value="300" {{ 'selected' if selected_interval == 300 else '' }}>5 минут</option>
+        <option value="1800" {{ 'selected' if selected_interval == 1800 else '' }}>30 минут</option>
+        <option value="3600" {{ 'selected' if selected_interval == 3600 else '' }}>1 час</option>
+        <option value="21600" {{ 'selected' if selected_interval == 21600 else '' }}>6 часов</option>
+        <option value="86400" {{ 'selected' if selected_interval == 86400 else '' }}>1 день</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="field">
+    <span>Канал уведомлений</span>
+    <input name="notification_channel" maxlength="64" placeholder="email или telegram" value="{{ form.notification_channel or '' }}">
+    <small>Если пусто, используется канал из профиля.</small>
+  </label>
+
+  <button class="button button-primary" type="submit">
+    <span class="button-label">Создать мониторинг</span>
+    <span class="spinner" aria-hidden="true"></span>
+  </button>
+</form>
+{% endblock %}

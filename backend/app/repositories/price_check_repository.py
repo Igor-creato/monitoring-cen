@@ -67,6 +67,34 @@ class PriceCheckRepository:
         )
         return total_result.scalar_one(), list(rows_result.scalars().all())
 
+    async def list_by_monitor_for_user(
+        self,
+        monitor_id: int,
+        user_id: int,
+        limit: int,
+        offset: int,
+    ) -> tuple[int, list[PriceCheckModel]]:
+        filters = [
+            PriceCheckModel.monitor_id == monitor_id,
+            MonitorModel.user_id == user_id,
+            MonitorModel.deleted_at.is_(None),
+        ]
+        total_result = await self.session.execute(
+            select(func.count())
+            .select_from(PriceCheckModel)
+            .join(MonitorModel, PriceCheckModel.monitor_id == MonitorModel.id)
+            .where(*filters)
+        )
+        rows_result = await self.session.execute(
+            select(PriceCheckModel)
+            .join(MonitorModel, PriceCheckModel.monitor_id == MonitorModel.id)
+            .where(*filters)
+            .order_by(PriceCheckModel.checked_at.desc(), PriceCheckModel.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return total_result.scalar_one(), list(rows_result.scalars().all())
+
     async def create_failure(
         self,
         monitor_id: int,
