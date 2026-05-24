@@ -1227,6 +1227,52 @@ USER_ROLE_LABELS = {
     UserRole.ADMIN: "Администратор",
 }
 
+NOTIFICATION_STATUS_LABELS = {
+    NotificationStatus.PENDING: "Ожидает отправки",
+    NotificationStatus.PROCESSING: "Отправляется",
+    NotificationStatus.SENT: "Отправлено",
+    NotificationStatus.FAILED: "Ошибка отправки",
+    NotificationStatus.SKIPPED: "Пропущено",
+    NotificationStatus.DUPLICATED: "Дубликат",
+}
+
+RUNTIME_SETTING_LABELS = {
+    "product_fetch_provider": "Поставщик данных о товарах",
+    "apify_actor_id": "Идентификатор обработчика Apify",
+    "apify_base_url": "Адрес API Apify",
+    "apify_api_token": "Токен API Apify",
+    "zyte_api_url": "Адрес API Zyte",
+    "zyte_api_key": "Ключ API Zyte",
+    "internal_api_token": "Внутренний API-токен",
+}
+
+RUNTIME_SETTING_SOURCE_LABELS = {
+    "db": "Из админки",
+    "env": "Из .env",
+    "missing": "Не задано",
+}
+
+ADMIN_ERROR_LABELS = {
+    "csrf": "сессия формы устарела",
+    "conflict": "пользователь уже существует",
+    "not_found": "запись не найдена",
+    "self_lock": "нельзя заблокировать собственный аккаунт администратора",
+    "last_admin": "нельзя отключить последнего активного администратора",
+    "password": "пароль должен быть не короче 8 символов",
+    "settings": "настройку не удалось сохранить",
+}
+
+RUNTIME_SETTINGS_ERROR_LABELS = {
+    "Setting value cannot be empty": "Значение настройки не может быть пустым",
+    "Secret value cannot be empty": "Секретное значение не может быть пустым",
+    "ADMIN_SECRETS_KEY is required for encrypted settings": (
+        "Для сохранения секретов задайте ADMIN_SECRETS_KEY"
+    ),
+    "ADMIN_SECRETS_KEY must be a valid Fernet key": (
+        "ADMIN_SECRETS_KEY должен быть корректным ключом Fernet"
+    ),
+}
+
 
 def _enum_label(value: Any, labels: dict[Any, str]) -> str:
     if value is None:
@@ -1266,6 +1312,37 @@ def _user_role_label(value: Any) -> str:
     return _enum_label(value, USER_ROLE_LABELS)
 
 
+def _notification_status_label(value: Any) -> str:
+    return _enum_label(value, NOTIFICATION_STATUS_LABELS)
+
+
+def _runtime_setting_label(value: Any) -> str:
+    return RUNTIME_SETTING_LABELS.get(str(value), str(value))
+
+
+def _runtime_setting_source_label(value: Any) -> str:
+    return RUNTIME_SETTING_SOURCE_LABELS.get(str(value), str(value))
+
+
+def _runtime_setting_updated_label(value: Any) -> str:
+    return _format_dt(value) if value else "Из .env или значения по умолчанию"
+
+
+def _admin_error_label(value: Any) -> str:
+    return ADMIN_ERROR_LABELS.get(str(value), str(value))
+
+
+def _runtime_settings_error_label(value: Any) -> str:
+    text = str(value)
+    if text.startswith(("Unsupported plain setting", "Unsupported secret setting")):
+        return "Эта настройка не поддерживается"
+    if text.startswith("Unsupported setting"):
+        return "Эта настройка не поддерживается"
+    if text.startswith("Cannot decrypt setting"):
+        return "Не удалось расшифровать сохраненное значение"
+    return RUNTIME_SETTINGS_ERROR_LABELS.get(text, text)
+
+
 templates.env.filters["money"] = _format_money
 templates.env.filters["dt"] = _format_dt
 templates.env.filters["interval"] = _interval_label
@@ -1275,6 +1352,12 @@ templates.env.filters["availability_label"] = _availability_label
 templates.env.filters["marketplace_label"] = _marketplace_label
 templates.env.filters["user_status_label"] = _user_status_label
 templates.env.filters["user_role_label"] = _user_role_label
+templates.env.filters["notification_status_label"] = _notification_status_label
+templates.env.filters["runtime_setting_label"] = _runtime_setting_label
+templates.env.filters["runtime_setting_source_label"] = _runtime_setting_source_label
+templates.env.filters["runtime_setting_updated_label"] = _runtime_setting_updated_label
+templates.env.filters["admin_error_label"] = _admin_error_label
+templates.env.filters["runtime_settings_error_label"] = _runtime_settings_error_label
 
 
 class WebRedirect(Exception):

@@ -4,7 +4,7 @@
 <section class="page-head">
   <div>
     <p class="eyebrow">Секреты не отображаются обратно</p>
-    <h1>Токены и provider config</h1>
+    <h1>Токены и настройки провайдеров</h1>
   </div>
   <a class="button button-secondary" href="/admin">К админке</a>
 </section>
@@ -13,7 +13,7 @@
   <div class="alert alert-success" role="status">Настройки сохранены.</div>
 {% endif %}
 {% if request.query_params.get('error') or error %}
-  <div class="alert alert-error" role="alert">{{ error or "Не удалось сохранить настройки." }}</div>
+  <div class="alert alert-error" role="alert">{{ error|runtime_settings_error_label if error else "Не удалось сохранить настройки." }}</div>
 {% endif %}
 
 <section class="detail-grid">
@@ -21,15 +21,15 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h2>Обновить настройку</h2>
     <label class="field">
-      <span>Ключ</span>
+      <span>Настройка</span>
       <select name="key">
-        <option value="product_fetch_provider">product_fetch_provider</option>
-        <option value="apify_actor_id">apify_actor_id</option>
-        <option value="apify_base_url">apify_base_url</option>
-        <option value="apify_api_token">apify_api_token</option>
-        <option value="zyte_api_url">zyte_api_url</option>
-        <option value="zyte_api_key">zyte_api_key</option>
-        <option value="internal_api_token">internal_api_token</option>
+        <option value="product_fetch_provider">Поставщик данных о товарах</option>
+        <option value="apify_actor_id">Идентификатор обработчика Apify</option>
+        <option value="apify_base_url">Адрес API Apify</option>
+        <option value="apify_api_token">Токен API Apify</option>
+        <option value="zyte_api_url">Адрес API Zyte</option>
+        <option value="zyte_api_key">Ключ API Zyte</option>
+        <option value="internal_api_token">Внутренний API-токен</option>
       </select>
     </label>
     <label class="field">
@@ -43,18 +43,18 @@
   </form>
 
   <article class="summary-panel">
-    <h2>Текущие источники</h2>
+    <h2>Текущие значения</h2>
     <dl class="facts">
       {% for item in token_statuses %}
         <div>
-          <dt>{{ item.key }}</dt>
+          <dt>{{ item.key|runtime_setting_label }}</dt>
           <dd>
-            <span class="badge badge-{{ item.source }}">{{ item.source }}</span>
+            <span class="badge badge-{{ item.source }}">{{ item.source|runtime_setting_source_label }}</span>
             {{ item.masked_value or "Не задано" }}
             <form method="post" action="/admin/tokens/clear" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="key" value="{{ item.key }}">
-              <button class="link-button" type="submit">Очистить DB override</button>
+              <button class="link-button" type="submit">Очистить значение из админки</button>
             </form>
           </dd>
         </div>

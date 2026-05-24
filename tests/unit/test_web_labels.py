@@ -1,6 +1,13 @@
 from pathlib import Path
+from types import SimpleNamespace
 
-from app.domain.enums import AvailabilityStatus, CheckStatus, Marketplace, MonitorStatus
+from app.domain.enums import (
+    AvailabilityStatus,
+    CheckStatus,
+    Marketplace,
+    MonitorStatus,
+    NotificationStatus,
+)
 from app.web.router import templates
 
 
@@ -28,3 +35,56 @@ def test_new_monitor_template_contains_marketplace_select() -> None:
 
     assert 'name="marketplace"' in template
     assert "Сейчас доступен мониторинг Wildberries." in template
+
+
+def test_admin_runtime_and_notification_labels_are_russian() -> None:
+    template = templates.env.from_string(
+        "{{ setting.key|runtime_setting_label }}|"
+        "{{ setting.source|runtime_setting_source_label }}|"
+        "{{ setting.updated_at|runtime_setting_updated_label }}|"
+        "{{ status|notification_status_label }}|"
+        "{{ error|runtime_settings_error_label }}"
+    )
+
+    rendered = template.render(
+        setting=SimpleNamespace(
+            key="apify_api_token",
+            source="missing",
+            updated_at=None,
+        ),
+        status=NotificationStatus.FAILED,
+        error="ADMIN_SECRETS_KEY is required for encrypted settings",
+    )
+
+    assert rendered == (
+        "Токен API Apify|"
+        "Не задано|"
+        "Из .env или значения по умолчанию|"
+        "Ошибка отправки|"
+        "Для сохранения секретов задайте ADMIN_SECRETS_KEY"
+    )
+
+
+def test_admin_templates_do_not_show_raw_english_operational_labels() -> None:
+    admin_templates = Path("backend/app/web/templates/admin")
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in admin_templates.glob("*.html")
+    )
+
+    forbidden = [
+        "Parser errors",
+        "Failed checks",
+        "Runtime-настройки",
+        "provider config",
+        "env/default",
+        "DB override",
+        "User ID",
+        "<th>User</th>",
+        "<th>Monitor</th>",
+        "pending</span>",
+        "failed</span>",
+        "none",
+    ]
+
+    for text in forbidden:
+        assert text not in combined

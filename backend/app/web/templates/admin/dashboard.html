@@ -20,27 +20,27 @@
   <div class="metric"><span>Активные</span><strong>{{ stats.active_monitors }}</strong></div>
   <div class="metric"><span>В ошибке</span><strong>{{ stats.error_monitors }}</strong></div>
   <div class="metric"><span>Проверки 24ч</span><strong>{{ stats.checks_24h }}</strong></div>
-  <div class="metric"><span>Уведомления pending</span><strong>{{ stats.pending_notifications }}</strong></div>
-  <div class="metric"><span>Уведомления failed</span><strong>{{ stats.failed_notifications }}</strong></div>
+  <div class="metric"><span>Ждут отправки</span><strong>{{ stats.pending_notifications }}</strong></div>
+  <div class="metric"><span>Ошибки отправки</span><strong>{{ stats.failed_notifications }}</strong></div>
 </section>
 
 <section class="section-head">
-  <h2>Runtime-настройки</h2>
+  <h2>Рабочие настройки</h2>
   <a href="/admin/tokens">Управлять</a>
 </section>
 {% if settings_error %}
-  <div class="alert alert-error" role="alert">{{ settings_error }}</div>
+  <div class="alert alert-error" role="alert">{{ settings_error|runtime_settings_error_label }}</div>
 {% endif %}
 <div class="table-wrap">
   <table>
-    <thead><tr><th>Ключ</th><th>Источник</th><th>Значение</th><th>Обновлено</th></tr></thead>
+    <thead><tr><th>Настройка</th><th>Источник</th><th>Значение</th><th>Обновлено</th></tr></thead>
     <tbody>
       {% for item in token_statuses %}
         <tr>
-          <td>{{ item.key }}</td>
-          <td><span class="badge badge-{{ item.source }}">{{ item.source }}</span></td>
+          <td>{{ item.key|runtime_setting_label }}</td>
+          <td><span class="badge badge-{{ item.source }}">{{ item.source|runtime_setting_source_label }}</span></td>
           <td>{{ item.masked_value or "Не задано" }}</td>
-          <td>{{ item.updated_at|dt if item.updated_at else "env/default" }}</td>
+          <td>{{ item.updated_at|runtime_setting_updated_label }}</td>
         </tr>
       {% endfor %}
     </tbody>

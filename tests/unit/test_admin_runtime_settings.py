@@ -145,7 +145,7 @@ async def test_runtime_secret_is_encrypted_masked_and_resolved() -> None:
 async def test_secret_write_requires_admin_secret_key() -> None:
     service = RuntimeSettingsService(
         FakeSettingsRepository(),  # type: ignore[arg-type]
-        Settings(jwt_secret_key="test-secret"),
+        Settings(jwt_secret_key="test-secret", admin_secrets_key=None),
     )
 
     with pytest.raises(RuntimeSettingsError, match="ADMIN_SECRETS_KEY"):

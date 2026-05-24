@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-head">
   <div>
-    <p class="eyebrow">User {{ monitor.user_id or "none" }}</p>
+    <p class="eyebrow">Пользователь {{ monitor.user_id or "не указан" }}</p>
     <h1>Мониторинг #{{ monitor.id }}</h1>
   </div>
   <a class="button button-secondary" href="/admin/monitors">К списку</a>
@@ -20,7 +20,7 @@
   <article class="summary-panel">
     <h2>Состояние</h2>
     <dl class="facts">
-      <div><dt>URL</dt><dd><a href="{{ monitor.url }}" target="_blank" rel="noreferrer">{{ monitor.url }}</a></dd></div>
+      <div><dt>Ссылка</dt><dd><a href="{{ monitor.url }}" target="_blank" rel="noreferrer">{{ monitor.url }}</a></dd></div>
       <div><dt>Статус</dt><dd><span class="badge">{{ monitor.status|monitor_status_label }}</span></dd></div>
       <div><dt>Маркетплейс</dt><dd>{{ monitor.marketplace|marketplace_label }}</dd></div>
       <div><dt>Текущая цена</dt><dd>{{ monitor.last_price|money }}</dd></div>
@@ -47,15 +47,15 @@
 <section class="section-head"><h2>Последние проверки</h2></section>
 <div class="table-wrap">
   <table>
-    <thead><tr><th>ID</th><th>Статус</th><th>Цена</th><th>Ошибка</th><th>Дата</th></tr></thead>
+    <thead><tr><th>№</th><th>Статус</th><th>Цена</th><th>Ошибка</th><th>Дата</th></tr></thead>
     <tbody>{% for check in history %}<tr><td>{{ check.id }}</td><td>{{ check.status|check_status_label }}</td><td>{{ check.price|money(check.currency) }}</td><td>{{ check.error_code or "" }} {{ check.error_message or "" }}</td><td>{{ check.checked_at|dt }}</td></tr>{% endfor %}</tbody>
   </table>
 </div>
 
-<section class="section-head"><h2>Parser errors</h2></section>
+<section class="section-head"><h2>Ошибки парсинга</h2></section>
 <div class="table-wrap">
   <table>
-    <thead><tr><th>ID</th><th>Код</th><th>Сообщение</th><th>Дата</th></tr></thead>
+    <thead><tr><th>№</th><th>Код</th><th>Сообщение</th><th>Дата</th></tr></thead>
     <tbody>{% for item in parser_errors %}<tr><td>{{ item.id }}</td><td>{{ item.error_code }}</td><td>{{ item.error_message or "" }}</td><td>{{ item.occurred_at|dt }}</td></tr>{% endfor %}</tbody>
   </table>
 </div>

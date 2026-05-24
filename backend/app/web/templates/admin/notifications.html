@@ -10,20 +10,20 @@
 </section>
 
 <form method="get" action="/admin/notifications" class="toolbar">
-  <label class="select-field"><span>Статус</span><select name="status"><option value="">Все</option>{% for item in statuses %}<option value="{{ item.value }}" {{ 'selected' if status_filter == item else '' }}>{{ item.value }}</option>{% endfor %}</select></label>
+  <label class="select-field"><span>Статус</span><select name="status"><option value="">Все</option>{% for item in statuses %}<option value="{{ item.value }}" {{ 'selected' if status_filter == item else '' }}>{{ item|notification_status_label }}</option>{% endfor %}</select></label>
 </form>
 
 <div class="table-wrap">
   <table>
-    <thead><tr><th>ID</th><th>User</th><th>Monitor</th><th>Канал</th><th>Статус</th><th>Ошибка</th><th>Создано</th></tr></thead>
+    <thead><tr><th>№</th><th>Пользователь</th><th>Мониторинг</th><th>Канал</th><th>Статус</th><th>Ошибка</th><th>Создано</th></tr></thead>
     <tbody>
       {% for item in notifications %}
         <tr>
           <td>{{ item.id }}</td>
-          <td>{{ item.user_id or "none" }}</td>
+          <td>{{ item.user_id or "не указан" }}</td>
           <td><a href="/admin/monitors/{{ item.monitor_id }}">#{{ item.monitor_id }}</a></td>
           <td>{{ item.channel }}</td>
-          <td><span class="badge">{{ item.status.value }}</span></td>
+          <td><span class="badge">{{ item.status|notification_status_label }}</span></td>
           <td>{{ item.error_code or "" }} {{ item.error_message or "" }}</td>
           <td>{{ item.created_at|dt }}</td>
         </tr>
