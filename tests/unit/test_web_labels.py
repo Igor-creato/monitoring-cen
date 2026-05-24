@@ -41,6 +41,7 @@ def test_admin_runtime_and_notification_labels_are_russian() -> None:
     template = templates.env.from_string(
         "{{ setting.key|runtime_setting_label }}|"
         "{{ setting.source|runtime_setting_source_label }}|"
+        "{{ provider|runtime_setting_value_label }}|"
         "{{ setting.updated_at|runtime_setting_updated_label }}|"
         "{{ status|notification_status_label }}|"
         "{{ error|runtime_settings_error_label }}"
@@ -52,6 +53,7 @@ def test_admin_runtime_and_notification_labels_are_russian() -> None:
             source="missing",
             updated_at=None,
         ),
+        provider="wildberries_direct",
         status=NotificationStatus.FAILED,
         error="ADMIN_SECRETS_KEY is required for encrypted settings",
     )
@@ -59,6 +61,7 @@ def test_admin_runtime_and_notification_labels_are_russian() -> None:
     assert rendered == (
         "Токен API Apify|"
         "Не задано|"
+        "Wildberries напрямую|"
         "Из .env или значения по умолчанию|"
         "Ошибка отправки|"
         "Для сохранения секретов задайте ADMIN_SECRETS_KEY"

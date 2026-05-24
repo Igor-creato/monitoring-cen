@@ -148,7 +148,7 @@ def _status_from_snapshot(snapshot: ProductSnapshot) -> CheckStatus:
     error_code = snapshot.error_code or ""
     if "timeout" in error_code:
         return CheckStatus.TIMEOUT
-    if error_code in {"captcha_detected", "blocked", "access_denied"}:
+    if error_code in {"captcha_detected", "blocked", "access_denied", "provider_blocked"}:
         return CheckStatus.BLOCKED
     if "network" in error_code:
         return CheckStatus.NETWORK_ERROR

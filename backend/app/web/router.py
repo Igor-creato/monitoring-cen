@@ -671,7 +671,12 @@ async def admin_token_update(
         return _redirect("/admin/tokens?error=csrf", status.HTTP_303_SEE_OTHER)
     service = RuntimeSettingsService(ServiceSettingRepository(session), settings)
     try:
-        if key in {"apify_api_token", "zyte_api_key", "internal_api_token"}:
+        if key in {
+            "apify_api_token",
+            "zyte_api_key",
+            "internal_api_token",
+            "wildberries_proxy_url",
+        }:
             await service.set_secret(key, value, admin.id)
         else:
             await service.set_plain(key, value, admin.id)
@@ -1238,12 +1243,23 @@ NOTIFICATION_STATUS_LABELS = {
 
 RUNTIME_SETTING_LABELS = {
     "product_fetch_provider": "Поставщик данных о товарах",
+    "wildberries_proxy_url": "Прокси Wildberries",
+    "wildberries_dest": "Регион доставки Wildberries",
+    "wildberries_request_timeout_seconds": "Таймаут запроса Wildberries",
+    "wildberries_basket_max_host": "Максимальный номер basket Wildberries",
     "apify_actor_id": "Идентификатор обработчика Apify",
     "apify_base_url": "Адрес API Apify",
     "apify_api_token": "Токен API Apify",
     "zyte_api_url": "Адрес API Zyte",
     "zyte_api_key": "Ключ API Zyte",
     "internal_api_token": "Внутренний API-токен",
+}
+
+RUNTIME_SETTING_VALUE_LABELS = {
+    "wildberries_direct": "Wildberries напрямую",
+    "apify": "Apify",
+    "zyte": "Zyte",
+    "mock": "Mock",
 }
 
 RUNTIME_SETTING_SOURCE_LABELS = {
@@ -1324,6 +1340,10 @@ def _runtime_setting_source_label(value: Any) -> str:
     return RUNTIME_SETTING_SOURCE_LABELS.get(str(value), str(value))
 
 
+def _runtime_setting_value_label(value: Any) -> str:
+    return RUNTIME_SETTING_VALUE_LABELS.get(str(value), str(value))
+
+
 def _runtime_setting_updated_label(value: Any) -> str:
     return _format_dt(value) if value else "Из .env или значения по умолчанию"
 
@@ -1355,6 +1375,7 @@ templates.env.filters["user_role_label"] = _user_role_label
 templates.env.filters["notification_status_label"] = _notification_status_label
 templates.env.filters["runtime_setting_label"] = _runtime_setting_label
 templates.env.filters["runtime_setting_source_label"] = _runtime_setting_source_label
+templates.env.filters["runtime_setting_value_label"] = _runtime_setting_value_label
 templates.env.filters["runtime_setting_updated_label"] = _runtime_setting_updated_label
 templates.env.filters["admin_error_label"] = _admin_error_label
 templates.env.filters["runtime_settings_error_label"] = _runtime_settings_error_label

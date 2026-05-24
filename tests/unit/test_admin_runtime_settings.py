@@ -129,16 +129,22 @@ async def test_runtime_secret_is_encrypted_masked_and_resolved() -> None:
     service = RuntimeSettingsService(repository, settings)  # type: ignore[arg-type]
 
     await service.set_secret("apify_api_token", "db-token-secret", 7)
+    await service.set_secret("wildberries_proxy_url", "http://proxy:8080", 7)
     await service.set_plain("product_fetch_provider", "apify", 7)
+    await service.set_plain("wildberries_basket_max_host", "7", 7)
     resolved = await service.resolve_settings()
     statuses = {item.key: item for item in await service.list_statuses()}
 
     encrypted = repository.saved["apify_api_token"].secret_encrypted
     assert encrypted is not None and "db-token-secret" not in encrypted
     assert resolved.apify_api_token == "db-token-secret"
+    assert resolved.wildberries_proxy_url == "http://proxy:8080"
     assert resolved.product_fetch_provider == "apify"
+    assert resolved.wildberries_basket_max_host == 7
     assert statuses["apify_api_token"].source == "db"
     assert statuses["apify_api_token"].masked_value == "db-t...cret"
+    assert statuses["wildberries_proxy_url"].masked_value == "http...8080"
+    assert statuses["product_fetch_provider"].masked_value == "apify"
 
 
 @pytest.mark.asyncio

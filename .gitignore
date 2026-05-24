@@ -7,6 +7,7 @@ tests/**/*.py
 !tests/unit/test_apify_wildberries_adapter.py
 !tests/unit/test_url_normalization.py
 !tests/unit/test_product_fetching.py
+!tests/unit/test_wildberries_direct_provider.py
 !tests/unit/test_monitor_service.py
 !tests/unit/test_web_labels.py
 .mypy_cache/

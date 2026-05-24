@@ -6,7 +6,7 @@ from app.domain.enums import AvailabilityStatus, Marketplace
 from app.infra.config import Settings
 from app.product_fetching.exceptions import ProviderConfigurationError, ProviderTimeoutError
 from app.product_fetching.factory import ProductProviderFactory
-from app.product_fetching.providers import MockProvider
+from app.product_fetching.providers import MockProvider, WildberriesDirectProvider
 from app.product_fetching.retry import ExponentialBackoffRetryPolicy
 
 
@@ -94,3 +94,21 @@ async def test_factory_requires_apify_configuration() -> None:
 
         with pytest.raises(ProviderConfigurationError, match="APIFY_API_TOKEN is required"):
             factory.create()
+
+
+@pytest.mark.asyncio
+async def test_factory_creates_wildberries_direct_without_apify_configuration() -> None:
+    settings = Settings(
+        _env_file=None,
+        product_fetch_provider="wildberries_direct",
+        apify_api_token=None,
+        apify_actor_id=None,
+        wildberries_proxy_url="http://proxy.example.test:8080",
+    )
+
+    async with httpx.AsyncClient() as http_client:
+        factory = ProductProviderFactory(http_client=http_client, settings=settings)
+
+        provider = factory.create()
+
+    assert isinstance(provider, WildberriesDirectProvider)

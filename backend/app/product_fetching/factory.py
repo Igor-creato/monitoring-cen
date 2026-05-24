@@ -10,6 +10,8 @@ from app.product_fetching.providers import (
     ApifyProvider,
     ApifyProviderConfig,
     MockProvider,
+    WildberriesDirectProvider,
+    WildberriesDirectProviderConfig,
     ZyteProvider,
     ZyteProviderConfig,
 )
@@ -17,6 +19,7 @@ from app.product_fetching.retry import ExponentialBackoffRetryPolicy, RetryPolic
 
 
 class ProductProviderKind(StrEnum):
+    WILDBERRIES_DIRECT = "wildberries_direct"
     APIFY = "apify"
     ZYTE = "zyte"
     MOCK = "mock"
@@ -31,6 +34,18 @@ class ProductProviderFactory:
     def create(self, provider: ProductProviderKind | str | None = None) -> ProductDataProvider:
         provider_kind = self._parse_provider(provider or self.settings.product_fetch_provider)
         retry_policy = self.retry_policy or self._build_retry_policy()
+
+        if provider_kind == ProductProviderKind.WILDBERRIES_DIRECT:
+            return WildberriesDirectProvider(
+                http_client=self.http_client,
+                config=WildberriesDirectProviderConfig(
+                    dest=self.settings.wildberries_dest,
+                    request_timeout_seconds=self.settings.wildberries_request_timeout_seconds,
+                    basket_max_host=self.settings.wildberries_basket_max_host,
+                    proxy_url=self.settings.wildberries_proxy_url,
+                ),
+                retry_policy=retry_policy,
+            )
 
         if provider_kind == ProductProviderKind.APIFY:
             return ApifyProvider(

@@ -39,7 +39,7 @@
         <tr>
           <td>{{ item.key|runtime_setting_label }}</td>
           <td><span class="badge badge-{{ item.source }}">{{ item.source|runtime_setting_source_label }}</span></td>
-          <td>{{ item.masked_value or "Не задано" }}</td>
+          <td>{{ item.masked_value|runtime_setting_value_label if item.masked_value else "Не задано" }}</td>
           <td>{{ item.updated_at|runtime_setting_updated_label }}</td>
         </tr>
       {% endfor %}

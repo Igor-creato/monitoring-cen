@@ -26,9 +26,8 @@ Use the real Wildberries provider locally:
 ```bash
 cp .env.local.example .env.local
 # edit .env.local:
-# PRODUCT_FETCH_PROVIDER=apify
-# APIFY_API_TOKEN=<token>
-# APIFY_ACTOR_ID=<actor>
+# PRODUCT_FETCH_PROVIDER=wildberries_direct
+# WILDBERRIES_PROXY_URL=<optional-proxy-url>
 docker compose --env-file .env.local up --build
 ```
 
@@ -42,7 +41,8 @@ curl -X POST \
   http://localhost:8000/internal/check-monitor/<monitor_id>
 ```
 
-The production Apify adapter currently supports Wildberries only.
+The legacy Apify adapter remains available with `PRODUCT_FETCH_PROVIDER=apify`,
+but Wildberries monitoring should use `wildberries_direct` by default.
 
 ## Production
 
@@ -82,7 +82,7 @@ sh ./scripts/smoke.sh "https://$APP_DOMAIN"
 
 - `local`: `.env.local`, bind-mounted backend from `docker-compose.override.yml`, exposed local ports `8000`, `3306`, `6379`, `PRODUCT_FETCH_PROVIDER=mock`.
 - `stage`: `.env.stage`, Traefik on a stage domain, separate MariaDB volume and stage secrets.
-- `prod`: `.env.prod`, Traefik HTTPS, no DB/Redis public ports, real provider tokens.
+- `prod`: `.env.prod`, Traefik HTTPS, no DB/Redis public ports, `PRODUCT_FETCH_PROVIDER=wildberries_direct`.
 
 Keep real env files out of git. Example files contain placeholders only.
 

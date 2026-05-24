@@ -28,11 +28,12 @@ http://localhost:8000
 
 ## Real Wildberries Monitoring
 
-Local config uses `PRODUCT_FETCH_PROVIDER=mock` by default. To check real product pages:
+Local config uses `PRODUCT_FETCH_PROVIDER=mock` by default for deterministic
+development. To check real Wildberries product pages, use the direct provider:
 
 1. Copy `.env.local.example` to `.env.local`.
-2. Set `PRODUCT_FETCH_PROVIDER=apify`.
-3. Fill `APIFY_API_TOKEN` and `APIFY_ACTOR_ID`.
+2. Set `PRODUCT_FETCH_PROVIDER=wildberries_direct`.
+3. Optionally set `WILDBERRIES_PROXY_URL` if direct WB requests are blocked.
 4. Optionally set `INTERNAL_API_TOKEN` if you want to run manual checks through the internal API.
 5. Start the stack:
 
@@ -49,7 +50,8 @@ curl -X POST \
   http://localhost:8000/internal/check-monitor/<monitor_id>
 ```
 
-The production Apify adapter currently supports Wildberries only.
+The legacy Apify adapter remains available with `PRODUCT_FETCH_PROVIDER=apify`,
+but Wildberries no longer requires Apify for normal monitoring.
 
 ## Admin UI
 

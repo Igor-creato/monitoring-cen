@@ -30,12 +30,17 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = 15
     http_max_connections: int = 100
 
-    product_fetch_provider: str = "mock"
+    product_fetch_provider: str = "wildberries_direct"
     product_fetch_request_timeout_seconds: float = 60
     product_fetch_retry_max_attempts: int = 3
     product_fetch_retry_base_delay_seconds: float = 0.25
     product_fetch_retry_max_delay_seconds: float = 5
     product_fetch_retry_jitter_ratio: float = 0.2
+
+    wildberries_proxy_url: str | None = Field(default=None, repr=False)
+    wildberries_dest: str = "-1257786"
+    wildberries_request_timeout_seconds: float = 60
+    wildberries_basket_max_host: int = 20
 
     apify_api_token: str | None = Field(default=None, repr=False)
     apify_actor_id: str | None = None

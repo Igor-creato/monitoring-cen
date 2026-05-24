@@ -10,9 +10,19 @@ from app.infra.config import Settings
 from app.infra.db.models.service_setting import ServiceSettingModel
 from app.repositories.service_setting_repository import ServiceSettingRepository
 
-SECRET_SETTING_KEYS = frozenset({"apify_api_token", "zyte_api_key", "internal_api_token"})
+SECRET_SETTING_KEYS = frozenset(
+    {"apify_api_token", "zyte_api_key", "internal_api_token", "wildberries_proxy_url"}
+)
 PLAIN_SETTING_KEYS = frozenset(
-    {"product_fetch_provider", "apify_actor_id", "apify_base_url", "zyte_api_url"}
+    {
+        "product_fetch_provider",
+        "apify_actor_id",
+        "apify_base_url",
+        "zyte_api_url",
+        "wildberries_dest",
+        "wildberries_request_timeout_seconds",
+        "wildberries_basket_max_host",
+    }
 )
 SERVICE_SETTING_KEYS = SECRET_SETTING_KEYS | PLAIN_SETTING_KEYS
 
@@ -79,7 +89,9 @@ class RuntimeSettingsService:
                 overrides[key] = self.decrypt_secret(setting)
             elif key in PLAIN_SETTING_KEYS and setting.value_text:
                 overrides[key] = setting.value_text
-        return self.settings.model_copy(update=overrides)
+        return self.settings.__class__.model_validate(
+            {**self.settings.model_dump(), **overrides}
+        )
 
     async def internal_api_token(self) -> str | None:
         setting = await self.repository.get("internal_api_token")
@@ -109,7 +121,9 @@ class RuntimeSettingsService:
                     key=key,
                     is_secret=is_secret,
                     source="db",
-                    masked_value=_mask_value(self.decrypt_secret(setting) if is_secret else value),
+                    masked_value=(
+                        _mask_value(self.decrypt_secret(setting)) if is_secret else value
+                    ),
                     updated_at=setting.updated_at,
                 )
         if env_value:
@@ -117,7 +131,7 @@ class RuntimeSettingsService:
                 key=key,
                 is_secret=is_secret,
                 source="env",
-                masked_value=_mask_value(str(env_value)),
+                masked_value=_mask_value(str(env_value)) if is_secret else str(env_value),
             )
         return SettingStatus(key=key, is_secret=is_secret, source="missing", masked_value="")
 

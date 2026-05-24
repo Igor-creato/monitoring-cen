@@ -24,6 +24,10 @@
       <span>Настройка</span>
       <select name="key">
         <option value="product_fetch_provider">Поставщик данных о товарах</option>
+        <option value="wildberries_dest">Регион доставки Wildberries</option>
+        <option value="wildberries_request_timeout_seconds">Таймаут запроса Wildberries</option>
+        <option value="wildberries_basket_max_host">Максимальный номер basket Wildberries</option>
+        <option value="wildberries_proxy_url">Прокси Wildberries</option>
         <option value="apify_actor_id">Идентификатор обработчика Apify</option>
         <option value="apify_base_url">Адрес API Apify</option>
         <option value="apify_api_token">Токен API Apify</option>
@@ -50,7 +54,7 @@
           <dt>{{ item.key|runtime_setting_label }}</dt>
           <dd>
             <span class="badge badge-{{ item.source }}">{{ item.source|runtime_setting_source_label }}</span>
-            {{ item.masked_value or "Не задано" }}
+            {{ item.masked_value|runtime_setting_value_label if item.masked_value else "Не задано" }}
             <form method="post" action="/admin/tokens/clear" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="key" value="{{ item.key }}">
