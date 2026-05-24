@@ -15,11 +15,13 @@ def _fixture(name: str) -> object:
     return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
-def _provider_for_payload(payload: object) -> ApifyProvider:
+def _provider_for_payload(payload: object, expected_nm_id: str = "178123456") -> ApifyProvider:
     def handler(request: httpx.Request) -> httpx.Response:
         request_payload = json.loads(request.content)
         assert request.headers["authorization"] == "Bearer test-token"
         assert request_payload["maxItems"] == 1
+        assert request_payload["nmIds"] == [expected_nm_id]
+        assert request_payload["proxyConfiguration"] == {"useApifyProxy": False}
         assert request.url.path == "/v2/acts/owner~wildberries/run-sync-get-dataset-items"
         return httpx.Response(200, json=payload)
 
@@ -53,13 +55,42 @@ async def test_apify_wildberries_returns_snapshot_from_found_fixture() -> None:
     assert snapshot.availability == AvailabilityStatus.IN_STOCK
     assert snapshot.seller_name == "Example Store"
     assert snapshot.image_url == "https://images.wbstatic.net/example-x.jpg"
-    assert snapshot.raw_payload["request"]["startUrls"][0]["url"] == snapshot.normalized_url
+    assert snapshot.raw_payload["request"]["nmIds"] == ["178123456"]
     assert snapshot.raw_payload["response"] == _fixture("wildberries_found.json")
 
 
 @pytest.mark.asyncio
+async def test_apify_wildberries_returns_snapshot_from_wb_seller_intel_payload() -> None:
+    provider = _provider_for_payload(
+        [
+            {
+                "nmId": 178123456,
+                "name": "Кроссовки Example Run",
+                "salePriceRub": 3490,
+                "priceRub": 4990,
+                "totalQuantity": 12,
+                "supplier": "Example Seller",
+                "brand": "Example",
+            }
+        ],
+    )
+
+    snapshot = await provider.fetch_product(
+        "https://www.wildberries.ru/catalog/178123456/detail.aspx",
+    )
+
+    assert snapshot.success is True
+    assert snapshot.title == "Кроссовки Example Run"
+    assert snapshot.current_price == Decimal("3490")
+    assert snapshot.old_price == Decimal("4990")
+    assert snapshot.currency == "RUB"
+    assert snapshot.availability == AvailabilityStatus.IN_STOCK
+    assert snapshot.seller_name == "Example Seller"
+
+
+@pytest.mark.asyncio
 async def test_apify_wildberries_returns_snapshot_for_unavailable_product() -> None:
-    provider = _provider_for_payload(_fixture("wildberries_unavailable.json"))
+    provider = _provider_for_payload(_fixture("wildberries_unavailable.json"), "178123457")
 
     snapshot = await provider.fetch_product(
         "https://www.wildberries.ru/catalog/178123457/detail.aspx",
@@ -75,7 +106,7 @@ async def test_apify_wildberries_returns_snapshot_for_unavailable_product() -> N
 
 @pytest.mark.asyncio
 async def test_apify_wildberries_returns_page_changed_failure_snapshot() -> None:
-    provider = _provider_for_payload(_fixture("wildberries_page_changed.json"))
+    provider = _provider_for_payload(_fixture("wildberries_page_changed.json"), "178123458")
 
     snapshot = await provider.fetch_product(
         "https://www.wildberries.ru/catalog/178123458/detail.aspx",
@@ -96,6 +127,7 @@ async def test_apify_wildberries_handles_target_antibot_403() -> None:
                 "errorMessage": "Access denied by anti-bot protection",
             },
         ],
+        "178123459",
     )
 
     snapshot = await provider.fetch_product(

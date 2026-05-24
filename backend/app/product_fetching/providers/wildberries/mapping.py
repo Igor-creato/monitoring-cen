@@ -3,6 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import urlparse
 
 from app.domain.enums import AvailabilityStatus
 from app.product_fetching.exceptions import PageStructureChangedError
@@ -67,14 +68,18 @@ CURRENT_PRICE_SELECTOR = FieldSelector(
     (
         ("salePriceU",),
         ("sale_price_u",),
+        ("salePriceRub",),
+        ("sale_price_rub",),
         ("salePrice",),
         ("sale_price",),
         ("priceU",),
         ("price", "salePriceU"),
+        ("price", "salePriceRub"),
         ("price", "salePrice"),
         ("price", "current"),
         ("currentPrice",),
         ("current_price",),
+        ("finalPriceRub",),
         ("finalPrice",),
     ),
 )
@@ -84,10 +89,15 @@ OLD_PRICE_SELECTOR = FieldSelector(
         ("retailPriceU",),
         ("oldPriceU",),
         ("old_price_u",),
+        ("priceRub",),
+        ("retailPriceRub",),
+        ("oldPriceRub",),
+        ("old_price_rub",),
         ("retailPrice",),
         ("oldPrice",),
         ("old_price",),
         ("price", "oldPriceU"),
+        ("price", "oldPriceRub"),
         ("price", "old"),
     ),
 )
@@ -109,6 +119,8 @@ AVAILABILITY_SELECTOR = FieldSelector(
         ("available",),
         ("stock",),
         ("quantity",),
+        ("totalQuantity",),
+        ("total_quantity",),
         ("isSoldOut",),
     ),
 )
@@ -116,6 +128,8 @@ SELLER_SELECTOR = FieldSelector(
     (
         ("seller", "name"),
         ("supplier", "name"),
+        ("seller",),
+        ("supplier",),
         ("sellerName",),
         ("supplierName",),
         ("brand",),
@@ -155,9 +169,11 @@ NOT_FOUND_MARKERS = (
 
 
 def build_apify_input(normalized_url: str) -> dict[str, Any]:
+    nm_id = _wildberries_nm_id(normalized_url)
     return {
-        "startUrls": [{"url": normalized_url}],
+        "nmIds": [nm_id],
         "maxItems": 1,
+        "proxyConfiguration": {"useApifyProxy": False},
     }
 
 
@@ -337,3 +353,19 @@ def _first_mapping_value(payload: Mapping[str, Any], keys: Sequence[str]) -> Any
 def _contains_marker(payload: Mapping[str, Any], markers: Sequence[str]) -> bool:
     text = str(payload).lower()
     return any(marker in text for marker in markers)
+
+
+def _wildberries_nm_id(normalized_url: str) -> str:
+    path_segments = tuple(
+        segment for segment in urlparse(normalized_url).path.split("/") if segment
+    )
+    if (
+        len(path_segments) >= 2
+        and path_segments[0].lower() == "catalog"
+        and path_segments[1].isdigit()
+    ):
+        return path_segments[1]
+    raise PageStructureChangedError(
+        "Wildberries normalized URL does not contain a product id",
+        raw_payload={"normalized_url": normalized_url},
+    )
