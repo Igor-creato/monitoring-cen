@@ -270,7 +270,12 @@ def upgrade() -> None:
         .where(notifications.c.dedupe_key.is_(None))
         .values(dedupe_key=sa.literal("legacy:") + sa.cast(notifications.c.id, sa.String(32)))
     )
-    op.alter_column("notifications", "dedupe_key", nullable=False)
+    op.alter_column(
+        "notifications",
+        "dedupe_key",
+        existing_type=sa.String(length=128),
+        nullable=False,
+    )
     op.create_foreign_key(
         "fk_notifications_user",
         "notifications",

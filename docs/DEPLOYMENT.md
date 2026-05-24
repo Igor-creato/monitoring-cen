@@ -1,0 +1,94 @@
+# Deployment
+
+## Local
+
+```bash
+cp .env.local.example .env.local
+docker compose --env-file .env.local up --build
+```
+
+API: `http://localhost:8000`
+
+Run migrations manually:
+
+```bash
+docker compose --env-file .env.local run --rm migrate
+```
+
+Run smoke tests:
+
+```bash
+sh ./scripts/smoke.sh http://localhost:8000
+```
+
+## Production
+
+Prepare VPS:
+
+- Ubuntu LTS with Docker Engine and Docker Compose plugin.
+- Open inbound ports `22`, `80`, `443`.
+- Keep MariaDB and Redis private; do not expose `3306` or `6379`.
+- Minimum: 1 vCPU, 2 GB RAM, 20 GB SSD.
+- Recommended: 2 vCPU, 4 GB RAM, 40 GB SSD.
+
+Deploy:
+
+```bash
+cd /opt/price-monitor
+git pull --ff-only origin main
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+sh ./scripts/smoke.sh "https://$APP_DOMAIN"
+```
+
+Logs:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml logs -f api worker
+```
+
+Rollback:
+
+```bash
+cd /opt/price-monitor
+git checkout <previous-known-good-sha>
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+sh ./scripts/smoke.sh "https://$APP_DOMAIN"
+```
+
+## Configs
+
+- `local`: `.env.local`, bind-mounted backend from `docker-compose.override.yml`, exposed local ports `8000`, `3306`, `6379`, `PRODUCT_FETCH_PROVIDER=mock`.
+- `stage`: `.env.stage`, Traefik on a stage domain, separate MariaDB volume and stage secrets.
+- `prod`: `.env.prod`, Traefik HTTPS, no DB/Redis public ports, real provider tokens.
+
+Keep real env files out of git. Example files contain placeholders only.
+
+## Backups
+
+Create backup directory:
+
+```bash
+mkdir -p /opt/price-monitor/backups
+```
+
+Backup:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec -T mariadb \
+  sh -c 'mariadb-dump -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" --single-transaction --routines --triggers "$MARIADB_DATABASE"' \
+  | gzip > "/opt/price-monitor/backups/price-monitor_$(date +%F_%H-%M-%S).sql.gz"
+```
+
+Restore drill:
+
+```bash
+gunzip -c /opt/price-monitor/backups/<backup>.sql.gz | docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec -T mariadb \
+  sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"'
+```
+
+Recommended policy:
+
+- Run the backup command daily from cron or a systemd timer.
+- Keep 14 days locally.
+- Copy backups offsite with `rclone` or `restic`.
+- Test restore monthly.

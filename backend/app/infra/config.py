@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_name: str = "price-monitor"
 
-    database_url: str = "postgresql+asyncpg://app:app@postgres:5432/app"
+    database_url: str = "mysql+asyncmy://app:app@mariadb:3306/app?charset=utf8mb4"
     redis_url: str = "redis://redis:6379/0"
 
     jwt_secret_key: str = Field(default="change-me-in-production", repr=False)

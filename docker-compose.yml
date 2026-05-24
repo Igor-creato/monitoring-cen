@@ -1,67 +1,99 @@
+name: price-monitor
+
+x-app-env: &app-env
+  env_file:
+    - ${APP_ENV_FILE:-.env.local}
+
+x-app-build: &app-build
+  context: .
+  dockerfile: docker/backend.Dockerfile
+
 services:
   migrate:
-    build:
-      context: .
-      dockerfile: docker/backend.Dockerfile
+    build: *app-build
     command: alembic upgrade head
-    env_file:
-      - .env
+    <<: *app-env
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
 
   api:
-    build:
-      context: .
-      dockerfile: docker/backend.Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    env_file:
-      - .env
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app/backend
+    build: *app-build
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    <<: *app-env
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
   worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
     command: arq app.workers.arq_settings.WorkerSettings
-    env_file:
-      - .env
-    volumes:
-      - ./backend:/app/backend
+    <<: *app-env
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
-        condition: service_started
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: app
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os; from redis import Redis; Redis.from_url(os.environ.get('REDIS_URL', 'redis://redis:6379/0')).ping()\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-app}
+      MARIADB_USER: ${MARIADB_USER:-app}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-app}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-app-root}
+      MARIADB_AUTO_UPGRADE: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mariadb-admin ping -h 127.0.0.1 -u\"$${MARIADB_USER}\" -p\"$${MARIADB_PASSWORD}\" --silent",
+        ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 20s
 
   redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
-  postgres_data:
+  mariadb_data:
+  redis_data:

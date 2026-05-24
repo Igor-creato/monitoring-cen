@@ -31,7 +31,13 @@ def upgrade() -> None:
         "users",
         sa.Column("default_notification_channel", sa.String(length=64), nullable=True),
     )
-    op.alter_column("users", "notifications_enabled", server_default=None)
+    op.alter_column(
+        "users",
+        "notifications_enabled",
+        existing_type=sa.Boolean(),
+        existing_nullable=False,
+        server_default=None,
+    )
 
 
 def downgrade() -> None:

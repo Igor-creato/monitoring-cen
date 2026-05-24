@@ -401,7 +401,7 @@ class ParserRegistry:
 ```text
 api       -> uvicorn app.main:app
 worker    -> arq app.workers.arq_settings.WorkerSettings
-postgres  -> database
+mariadb   -> database
 redis     -> queue/cache
 ```
 
@@ -511,7 +511,7 @@ APP_ENV=local
 APP_DEBUG=true
 APP_NAME=price-monitor
 
-DATABASE_URL=postgresql+asyncpg://app:app@postgres:5432/app
+DATABASE_URL=mysql+asyncmy://app:app@mariadb:3306/app?charset=utf8mb4
 REDIS_URL=redis://redis:6379/0
 
 HTTP_TIMEOUT_SECONDS=15

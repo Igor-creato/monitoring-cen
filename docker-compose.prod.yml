@@ -1,0 +1,77 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - public
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+
+  migrate:
+    restart: "no"
+    networks:
+      - internal
+
+  api:
+    restart: unless-stopped
+    networks:
+      - internal
+      - public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_PUBLIC_NETWORK:-price-monitor-public}
+      - traefik.http.routers.price-monitor.rule=Host(`${APP_DOMAIN}`)
+      - traefik.http.routers.price-monitor.entrypoints=websecure
+      - traefik.http.routers.price-monitor.tls=true
+      - traefik.http.routers.price-monitor.tls.certresolver=letsencrypt
+      - traefik.http.services.price-monitor.loadbalancer.server.port=8000
+    mem_limit: 768m
+    cpus: 0.75
+
+  worker:
+    restart: unless-stopped
+    networks:
+      - internal
+    mem_limit: 768m
+    cpus: 0.75
+
+  mariadb:
+    restart: unless-stopped
+    networks:
+      - internal
+    mem_limit: 1g
+    cpus: 1.0
+
+  redis:
+    restart: unless-stopped
+    networks:
+      - internal
+    mem_limit: 256m
+    cpus: 0.25
+
+volumes:
+  traefik_letsencrypt:
+
+networks:
+  internal:
+    name: ${COMPOSE_PROJECT_NAME:-price-monitor}-internal
+    internal: true
+  public:
+    name: ${TRAEFIK_PUBLIC_NETWORK:-price-monitor-public}

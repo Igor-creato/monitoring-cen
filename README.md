@@ -10,7 +10,8 @@ Architecture details live in:
 ## Local Run
 
 ```bash
-docker compose up --build
+cp .env.local.example .env.local
+docker compose --env-file .env.local up --build
 ```
 
 Before the API and worker start, the `migrate` service runs:
@@ -24,3 +25,9 @@ API will be available at:
 ```text
 http://localhost:8000
 ```
+
+## Deployment
+
+Production, backup, VPS, config, and smoke-test commands live in:
+
+- `docs/DEPLOYMENT.md`
