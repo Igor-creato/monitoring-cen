@@ -175,9 +175,32 @@ async def test_wildberries_direct_maps_429_to_blocked_failure_snapshot() -> None
 
 
 @pytest.mark.asyncio
-async def test_wildberries_direct_maps_x_pow_to_blocked_failure_snapshot() -> None:
+async def test_wildberries_direct_accepts_product_payload_with_x_pow_header() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, headers={"x-pow": "required"}, request=request)
+        return httpx.Response(
+            200,
+            headers={"x-pow": "status=invalid"},
+            json=_product_payload(salePriceU=199900),
+            request=request,
+        )
+
+    snapshot = await _provider(handler).fetch_product(
+        "https://www.wildberries.ru/catalog/983268564/detail.aspx"
+    )
+
+    assert snapshot.success is True
+    assert snapshot.current_price == Decimal("1999")
+
+
+@pytest.mark.asyncio
+async def test_wildberries_direct_maps_x_pow_without_product_to_blocked_failure_snapshot() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"x-pow": "required"},
+            json={"products": []},
+            request=request,
+        )
 
     snapshot = await _provider(handler).fetch_product(
         "https://www.wildberries.ru/catalog/983268564/detail.aspx"

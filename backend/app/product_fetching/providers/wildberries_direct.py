@@ -116,7 +116,7 @@ class WildberriesDirectProvider(AbstractProductProvider):
             attempt = _attempt_record(source, str(response.url), response)
             attempts.append(attempt)
 
-            if self._is_blocked(response):
+            if self._is_blocked_status(response):
                 raise ProviderBlockedError(
                     f"Wildberries blocked direct request: HTTP {response.status_code}",
                     provider_name=self.name,
@@ -158,6 +158,12 @@ class WildberriesDirectProvider(AbstractProductProvider):
                     payload=payload,
                     attempts=tuple(attempts),
                 )
+            if self._has_pow_challenge(response):
+                raise ProviderBlockedError(
+                    "Wildberries returned PoW challenge without product data",
+                    provider_name=self.name,
+                    raw_payload={"attempts": attempts, "response": payload},
+                )
 
         basket_result = await self._fetch_basket_payload(nm_id, headers, attempts)
         if basket_result is not None:
@@ -184,7 +190,7 @@ class WildberriesDirectProvider(AbstractProductProvider):
             response = await self._get(url, headers=headers)
             attempts.append(_attempt_record("basket_card_json", str(response.url), response))
 
-            if self._is_blocked(response):
+            if self._is_blocked_status(response):
                 raise ProviderBlockedError(
                     f"Wildberries basket blocked direct request: HTTP {response.status_code}",
                     provider_name=self.name,
@@ -215,6 +221,12 @@ class WildberriesDirectProvider(AbstractProductProvider):
                     basket_host=basket_host,
                     payload=payload,
                     attempts=tuple(attempts),
+                )
+            if self._has_pow_challenge(response):
+                raise ProviderBlockedError(
+                    "Wildberries basket returned PoW challenge without product data",
+                    provider_name=self.name,
+                    raw_payload={"attempts": attempts, "response": payload},
                 )
         return None
 
@@ -276,9 +288,11 @@ class WildberriesDirectProvider(AbstractProductProvider):
         return payload
 
     @staticmethod
-    def _is_blocked(response: httpx.Response) -> bool:
-        if response.status_code in {403, 429}:
-            return True
+    def _is_blocked_status(response: httpx.Response) -> bool:
+        return response.status_code in {403, 429}
+
+    @staticmethod
+    def _has_pow_challenge(response: httpx.Response) -> bool:
         return any(header.lower() == "x-pow" for header in response.headers)
 
 
