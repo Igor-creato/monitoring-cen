@@ -6,6 +6,7 @@ import structlog
 from arq import Retry
 
 from app.domain.enums import MonitorStatus, NotificationStatus
+from app.infra.metrics import observe_notification_send
 from app.infra.redis_lock import acquire_redis_lock
 from app.notifications.base import NotificationDeliveryError, NotificationSkipped
 from app.repositories.monitor_repository import MonitorRepository
@@ -162,6 +163,11 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
                 error_code=exc.error_code,
                 error_message=str(exc),
             )
+            observe_notification_send(
+                status=NotificationStatus.SKIPPED.value,
+                channel=notification.channel,
+                error_code=exc.error_code,
+            )
             logger.info(
                 "Notification delivery skipped",
                 notification_id=notification_id,
@@ -174,6 +180,11 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
                 notification,
                 error_code=exc.error_code,
                 error_message=str(exc),
+            )
+            observe_notification_send(
+                status=NotificationStatus.FAILED.value,
+                channel=notification.channel,
+                error_code=exc.error_code,
             )
             if _is_final_try(ctx, settings.notification_max_retries):
                 await _dead_letter(
@@ -203,6 +214,11 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
                 error_code=exc.__class__.__name__,
                 error_message=str(exc),
             )
+            observe_notification_send(
+                status=NotificationStatus.FAILED.value,
+                channel=notification.channel,
+                error_code=exc.__class__.__name__,
+            )
             if _is_final_try(ctx, settings.notification_max_retries):
                 await _dead_letter(
                     redis,
@@ -221,6 +237,10 @@ async def send_notification(ctx: dict[str, Any], notification_id: int) -> None:
             raise Retry(defer=_notification_retry_delay(ctx, settings)) from exc
 
         await repository.mark_sent(notification)
+        observe_notification_send(
+            status=NotificationStatus.SENT.value,
+            channel=notification.channel,
+        )
         logger.info("Notification sent", notification_id=notification_id)
 
 

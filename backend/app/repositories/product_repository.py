@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from app.common.clock import utc_now
 from app.domain.enums import SourceStatus
 from app.domain.exceptions import EntityNotFoundError
 from app.infra.db.models.monitor import MonitorModel
+from app.infra.db.models.parser_error import ParserErrorModel
 from app.infra.db.models.product import ProductModel
 from app.infra.db.models.product_source import ProductSourceModel
 from app.product_fetching.models import ProductSnapshot
@@ -125,6 +127,32 @@ class ProductRepository:
         source.last_error_code = snapshot.error_code
         source.last_error_message = snapshot.error_message
 
+    async def record_parser_error(
+        self,
+        *,
+        source: ProductSourceModel,
+        monitor_id: int | None,
+        snapshot: ProductSnapshot,
+        retryable: bool,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> ParserErrorModel:
+        raw_payload = snapshot.raw_payload if isinstance(snapshot.raw_payload, Mapping) else {}
+        parser_error = ParserErrorModel(
+            product_source_id=source.id,
+            monitor_id=monitor_id,
+            occurred_at=snapshot.fetched_at,
+            error_code=error_code or snapshot.error_code or "unknown_parser_error",
+            error_message=error_message or snapshot.error_message,
+            parser_version=_raw_string(raw_payload, "parser_version"),
+            http_status=_raw_int(raw_payload, "status_code"),
+            response_time_ms=_raw_int(raw_payload, "response_time_ms"),
+            retryable=retryable,
+        )
+        self.session.add(parser_error)
+        await self.session.flush()
+        return parser_error
+
 
 def _url_hash(normalized_url: str) -> str:
     return hashlib.sha256(normalized_url.encode("utf-8")).hexdigest()
@@ -133,3 +161,17 @@ def _url_hash(normalized_url: str) -> str:
 def _domain_from_url(normalized_url: str) -> str:
     parsed = urlparse(normalized_url)
     return (parsed.hostname or "").lower()
+
+
+def _raw_string(raw_payload: Mapping, key: str) -> str | None:
+    value = raw_payload.get(key)
+    return str(value) if value is not None else None
+
+
+def _raw_int(raw_payload: Mapping, key: str) -> int | None:
+    value = raw_payload.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None

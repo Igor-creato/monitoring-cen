@@ -89,7 +89,13 @@ async def register_submit(
     except ValidationError as exc:
         return _form_error(request, "auth/register.html", _validation_message(exc), settings, form)
     except ConflictError:
-        return _form_error(request, "auth/register.html", "Пользователь уже существует.", settings, form)
+        return _form_error(
+            request,
+            "auth/register.html",
+            "Пользователь уже существует.",
+            settings,
+            form,
+        )
 
     response = _redirect("/monitors", status.HTTP_303_SEE_OTHER)
     _set_auth_cookie(response, token, settings)
@@ -213,7 +219,14 @@ async def monitor_create(
         "notification_channel": notification_channel,
     }
     if not _valid_csrf(request, csrf_token, settings):
-        return _form_error(request, "monitors/new.html", "Сессия формы устарела.", settings, form, user)
+        return _form_error(
+            request,
+            "monitors/new.html",
+            "Сессия формы устарела.",
+            settings,
+            form,
+            user,
+        )
 
     try:
         channel = _clean_channel(notification_channel)
@@ -352,7 +365,9 @@ async def profile_page(
 ) -> Response:
     user = await _require_user(request, users, settings)
     total, monitors = await service.list_monitors(user.id, 200, 0)
-    channels = sorted({monitor.notification_channel for monitor in monitors if monitor.notification_channel})
+    channels = sorted(
+        {monitor.notification_channel for monitor in monitors if monitor.notification_channel}
+    )
     return _render(
         request,
         "profile/index.html",
