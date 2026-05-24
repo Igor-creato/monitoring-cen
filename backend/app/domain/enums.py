@@ -45,6 +45,11 @@ class UserStatus(StrEnum):
     DELETED = "deleted"
 
 
+class UserRole(StrEnum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class SourceStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"

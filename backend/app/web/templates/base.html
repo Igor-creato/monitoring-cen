@@ -17,6 +17,9 @@
         <nav class="topnav" aria-label="Основная навигация">
           <a href="/monitors" class="{{ 'is-active' if current_path.startswith('/monitors') else '' }}">Мониторинги</a>
           <a href="/profile" class="{{ 'is-active' if current_path.startswith('/profile') else '' }}">Профиль</a>
+          {% if user.role.value == 'admin' %}
+            <a href="/admin" class="{{ 'is-active' if current_path.startswith('/admin') else '' }}">Админка</a>
+          {% endif %}
         </nav>
         <form method="post" action="/logout" class="logout-form" data-loading>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

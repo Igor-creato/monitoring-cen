@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">User {{ monitor.user_id or "none" }}</p>
+    <h1>Мониторинг #{{ monitor.id }}</h1>
+  </div>
+  <a class="button button-secondary" href="/admin/monitors">К списку</a>
+</section>
+
+{% if request.query_params.get('saved') %}
+  <div class="alert alert-success" role="status">Действие выполнено.</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+  <div class="alert alert-error" role="alert">Действие не выполнено.</div>
+{% endif %}
+
+<section class="detail-grid">
+  <article class="summary-panel">
+    <h2>Состояние</h2>
+    <dl class="facts">
+      <div><dt>URL</dt><dd><a href="{{ monitor.url }}" target="_blank" rel="noreferrer">{{ monitor.url }}</a></dd></div>
+      <div><dt>Статус</dt><dd><span class="badge">{{ monitor.status|monitor_status_label }}</span></dd></div>
+      <div><dt>Маркетплейс</dt><dd>{{ monitor.marketplace|marketplace_label }}</dd></div>
+      <div><dt>Текущая цена</dt><dd>{{ monitor.last_price|money }}</dd></div>
+      <div><dt>Цель</dt><dd>{{ monitor.target_price|money }}</dd></div>
+      <div><dt>Последняя проверка</dt><dd>{{ monitor.last_checked_at|dt }}</dd></div>
+      <div><dt>Следующая проверка</dt><dd>{{ monitor.next_check_at|dt }}</dd></div>
+      <div><dt>Ошибка</dt><dd>{{ monitor.error_code or "Нет" }} {{ monitor.error_reason or "" }}</dd></div>
+    </dl>
+  </article>
+
+  <form method="post" action="/admin/monitors/{{ monitor.id }}/action" class="form-panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Действия</h2>
+    <label class="field">
+      <span>Новый статус</span>
+      <select name="status">{% for item in statuses %}<option value="{{ item.value }}" {{ 'selected' if monitor.status == item else '' }}>{{ item|monitor_status_label }}</option>{% endfor %}</select>
+    </label>
+    <button class="button button-secondary" name="action" value="status" type="submit">Сменить статус</button>
+    <button class="button button-primary" name="action" value="check" type="submit">Запустить проверку</button>
+    <button class="button button-danger" name="action" value="delete" type="submit">Удалить</button>
+  </form>
+</section>
+
+<section class="section-head"><h2>Последние проверки</h2></section>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>ID</th><th>Статус</th><th>Цена</th><th>Ошибка</th><th>Дата</th></tr></thead>
+    <tbody>{% for check in history %}<tr><td>{{ check.id }}</td><td>{{ check.status|check_status_label }}</td><td>{{ check.price|money(check.currency) }}</td><td>{{ check.error_code or "" }} {{ check.error_message or "" }}</td><td>{{ check.checked_at|dt }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+
+<section class="section-head"><h2>Parser errors</h2></section>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>ID</th><th>Код</th><th>Сообщение</th><th>Дата</th></tr></thead>
+    <tbody>{% for item in parser_errors %}<tr><td>{{ item.id }}</td><td>{{ item.error_code }}</td><td>{{ item.error_message or "" }}</td><td>{{ item.occurred_at|dt }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endblock %}

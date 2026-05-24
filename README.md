@@ -51,6 +51,25 @@ curl -X POST \
 
 The production Apify adapter currently supports Wildberries only.
 
+## Admin UI
+
+Set `ADMIN_EMAILS` to a comma-separated list before registration or login. Matching
+users are promoted to the `admin` role and can open:
+
+```text
+http://localhost:8000/admin
+```
+
+To save provider/internal tokens from the admin UI, set `ADMIN_SECRETS_KEY` to a
+Fernet key. You can generate one with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Runtime token overrides saved in the admin UI are encrypted in the database and
+take precedence over env values. Env values remain the fallback.
+
 ## Deployment
 
 Production, backup, VPS, config, and smoke-test commands live in:

@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     password_hash_iterations: int = 260_000
     internal_api_token: str | None = Field(default=None, repr=False)
+    admin_emails: str = ""
+    admin_secrets_key: str | None = Field(default=None, repr=False)
 
     http_timeout_seconds: float = 15
     http_max_connections: int = 100

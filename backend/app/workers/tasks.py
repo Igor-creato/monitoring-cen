@@ -9,6 +9,7 @@ from app.domain.enums import MonitorStatus, NotificationStatus
 from app.infra.metrics import observe_notification_send
 from app.infra.redis_lock import acquire_redis_lock
 from app.notifications.base import NotificationDeliveryError, NotificationSkipped
+from app.product_fetching.factory import create_product_provider
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.price_check_repository import PriceCheckRepository
@@ -16,6 +17,7 @@ from app.repositories.product_repository import ProductRepository
 from app.repositories.user_repository import UserRepository
 from app.services.notification_service import NotificationService
 from app.services.price_check_service import PriceCheckService
+from app.services.runtime_settings import resolve_runtime_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -59,13 +61,17 @@ async def run_monitor_check(ctx: dict[str, Any], monitor_id: int) -> None:
 
         try:
             async with session_factory() as session:
+                runtime_settings = await resolve_runtime_settings(session, settings)
                 service = PriceCheckService(
                     monitor_repository=MonitorRepository(session),
                     price_check_repository=PriceCheckRepository(session),
                     product_repository=ProductRepository(session),
                     notification_repository=NotificationRepository(session),
                     user_repository=UserRepository(session),
-                    product_provider=ctx["product_provider"],
+                    product_provider=create_product_provider(
+                        ctx["http_client"],
+                        settings=runtime_settings,
+                    ),
                     notification_dedupe_window_seconds=(
                         settings.notification_dedupe_window_seconds
                     ),

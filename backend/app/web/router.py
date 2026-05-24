@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -11,9 +11,12 @@ from fastapi import APIRouter, Depends, Form, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_auth_service,
+    get_db_session,
     get_monitor_repository,
     get_monitor_service,
     get_price_check_repository,
@@ -22,7 +25,16 @@ from app.api.deps import (
 )
 from app.api.v1.schemas.auth import LoginRequest, RegisterRequest
 from app.api.v1.schemas.monitor import MonitorCreateRequest, MonitorUpdateRequest
-from app.domain.enums import AvailabilityStatus, CheckStatus, Marketplace, MonitorStatus
+from app.common.clock import utc_now
+from app.domain.enums import (
+    AvailabilityStatus,
+    CheckStatus,
+    Marketplace,
+    MonitorStatus,
+    NotificationStatus,
+    UserRole,
+    UserStatus,
+)
 from app.domain.exceptions import (
     AuthenticationError,
     ConflictError,
@@ -30,14 +42,21 @@ from app.domain.exceptions import (
     EntityNotFoundError,
 )
 from app.infra.config import Settings
+from app.infra.db.models.audit_log import AuditLogModel
 from app.infra.db.models.monitor import MonitorModel
+from app.infra.db.models.notification import NotificationModel
+from app.infra.db.models.parser_error import ParserErrorModel
+from app.infra.db.models.price_check import PriceCheckModel
 from app.infra.db.models.user import UserModel
-from app.infra.security import decode_jwt
+from app.infra.security import decode_jwt, hash_password
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.price_check_repository import PriceCheckRepository
+from app.repositories.service_setting_repository import ServiceSettingRepository
 from app.repositories.user_repository import UserRepository
+from app.scheduler.enqueue import enqueue_monitor_check
 from app.services.auth_service import AuthService
 from app.services.monitor_service import MonitorService
+from app.services.runtime_settings import RuntimeSettingsError, RuntimeSettingsService
 
 BASE_DIR = Path(__file__).resolve().parent
 static_directory = BASE_DIR / "static"
@@ -412,6 +431,474 @@ async def profile_update(
     return _redirect("/profile?saved=1", status.HTTP_303_SEE_OTHER)
 
 
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    since = utc_now() - timedelta(hours=24)
+    stats = {
+        "users": await session.scalar(select(func.count()).select_from(UserModel)) or 0,
+        "admins": await users.count_admins(),
+        "monitors": await session.scalar(select(func.count()).select_from(MonitorModel)) or 0,
+        "active_monitors": await session.scalar(
+            select(func.count())
+            .select_from(MonitorModel)
+            .where(MonitorModel.status == MonitorStatus.ACTIVE)
+            .where(MonitorModel.deleted_at.is_(None))
+        )
+        or 0,
+        "error_monitors": await session.scalar(
+            select(func.count())
+            .select_from(MonitorModel)
+            .where(MonitorModel.status.in_((MonitorStatus.ERROR, MonitorStatus.FAILED)))
+            .where(MonitorModel.deleted_at.is_(None))
+        )
+        or 0,
+        "checks_24h": await session.scalar(
+            select(func.count())
+            .select_from(PriceCheckModel)
+            .where(PriceCheckModel.checked_at >= since)
+        )
+        or 0,
+        "pending_notifications": await session.scalar(
+            select(func.count())
+            .select_from(NotificationModel)
+            .where(NotificationModel.status == NotificationStatus.PENDING)
+        )
+        or 0,
+        "failed_notifications": await session.scalar(
+            select(func.count())
+            .select_from(NotificationModel)
+            .where(NotificationModel.status == NotificationStatus.FAILED)
+        )
+        or 0,
+    }
+    try:
+        token_statuses = await RuntimeSettingsService(
+            ServiceSettingRepository(session),
+            settings,
+        ).list_statuses()
+        settings_error = None
+    except RuntimeSettingsError as exc:
+        token_statuses = []
+        settings_error = str(exc)
+    return _render(
+        request,
+        "admin/dashboard.html",
+        {
+            "title": "Админка",
+            "user": admin,
+            "stats": stats,
+            "token_statuses": token_statuses,
+            "settings_error": settings_error,
+        },
+        settings,
+    )
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(
+    request: Request,
+    q: str | None = Query(default=None),
+    role: UserRole | None = Query(default=None),
+    user_status: UserStatus | None = Query(default=None, alias="status"),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    total, items = await users.list_users(200, 0, q, user_status, role)
+    return _render(
+        request,
+        "admin/users.html",
+        {
+            "title": "Пользователи",
+            "user": admin,
+            "users": items,
+            "total": total,
+            "q": q or "",
+            "role_filter": role,
+            "status_filter": user_status,
+            "roles": list(UserRole),
+            "user_statuses": list(UserStatus),
+        },
+        settings,
+    )
+
+
+@router.post("/admin/users", response_class=HTMLResponse)
+async def admin_user_create(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    role: UserRole = Form(UserRole.USER),
+    user_status: UserStatus = Form(UserStatus.ACTIVE, alias="status"),
+    notifications_enabled: str | None = Form(None),
+    default_notification_channel: str = Form(""),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if not _valid_csrf(request, csrf_token, settings):
+        return _redirect("/admin/users?error=csrf", status.HTTP_303_SEE_OTHER)
+    try:
+        user = await users.create(
+            email=email.strip().lower(),
+            password_hash=hash_password(password, settings),
+            role=role,
+        )
+        user.status = user_status
+        user.notifications_enabled = notifications_enabled == "on"
+        user.default_notification_channel = _clean_channel(default_notification_channel)
+        await users.session.commit()
+    except ConflictError:
+        return _redirect("/admin/users?error=conflict", status.HTTP_303_SEE_OTHER)
+    await _audit(session, admin, request, "user", user.id, "create", None, _user_audit(user))
+    return _redirect("/admin/users?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/admin/users/{user_id}", response_class=HTMLResponse)
+async def admin_user_update(
+    user_id: int,
+    request: Request,
+    role: UserRole = Form(...),
+    user_status: UserStatus = Form(..., alias="status"),
+    notifications_enabled: str | None = Form(None),
+    default_notification_channel: str = Form(""),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if not _valid_csrf(request, csrf_token, settings):
+        return _redirect("/admin/users?error=csrf", status.HTTP_303_SEE_OTHER)
+    target = await users.get(user_id)
+    if target is None:
+        return _redirect("/admin/users?error=not_found", status.HTTP_303_SEE_OTHER)
+    if target.id == admin.id and (role != UserRole.ADMIN or user_status != UserStatus.ACTIVE):
+        return _redirect("/admin/users?error=self_lock", status.HTTP_303_SEE_OTHER)
+    if (
+        target.role == UserRole.ADMIN
+        and target.status == UserStatus.ACTIVE
+        and (role != UserRole.ADMIN or user_status != UserStatus.ACTIVE)
+        and await users.count_admins() <= 1
+    ):
+        return _redirect("/admin/users?error=last_admin", status.HTTP_303_SEE_OTHER)
+
+    old_values = _user_audit(target)
+    target.role = role
+    target.status = user_status
+    target.notifications_enabled = notifications_enabled == "on"
+    target.default_notification_channel = _clean_channel(default_notification_channel)
+    await users.session.commit()
+    await users.session.refresh(target)
+    await _audit(
+        session,
+        admin,
+        request,
+        "user",
+        target.id,
+        "update",
+        old_values,
+        _user_audit(target),
+    )
+    return _redirect("/admin/users?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/admin/users/{user_id}/password", response_class=HTMLResponse)
+async def admin_user_password(
+    user_id: int,
+    request: Request,
+    password: str = Form(...),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if not _valid_csrf(request, csrf_token, settings):
+        return _redirect("/admin/users?error=csrf", status.HTTP_303_SEE_OTHER)
+    target = await users.get(user_id)
+    if target is None or len(password) < 8:
+        return _redirect("/admin/users?error=password", status.HTTP_303_SEE_OTHER)
+    target.password_hash = hash_password(password, settings)
+    await users.session.commit()
+    await _audit(session, admin, request, "user", target.id, "reset_password", None, None)
+    return _redirect("/admin/users?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/admin/tokens", response_class=HTMLResponse)
+async def admin_tokens_page(
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    service = RuntimeSettingsService(ServiceSettingRepository(session), settings)
+    try:
+        token_statuses = await service.list_statuses()
+        error = None
+    except RuntimeSettingsError as exc:
+        token_statuses = []
+        error = str(exc)
+    return _render(
+        request,
+        "admin/tokens.html",
+        {"title": "Токены", "user": admin, "token_statuses": token_statuses, "error": error},
+        settings,
+    )
+
+
+@router.post("/admin/tokens", response_class=HTMLResponse)
+async def admin_token_update(
+    request: Request,
+    key: str = Form(...),
+    value: str = Form(...),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if not _valid_csrf(request, csrf_token, settings):
+        return _redirect("/admin/tokens?error=csrf", status.HTTP_303_SEE_OTHER)
+    service = RuntimeSettingsService(ServiceSettingRepository(session), settings)
+    try:
+        if key in {"apify_api_token", "zyte_api_key", "internal_api_token"}:
+            await service.set_secret(key, value, admin.id)
+        else:
+            await service.set_plain(key, value, admin.id)
+    except RuntimeSettingsError:
+        return _redirect("/admin/tokens?error=settings", status.HTTP_303_SEE_OTHER)
+    await _audit(
+        session,
+        admin,
+        request,
+        "service_setting",
+        None,
+        f"update:{key}",
+        None,
+        {"key": key},
+    )
+    return _redirect("/admin/tokens?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/admin/tokens/clear", response_class=HTMLResponse)
+async def admin_token_clear(
+    request: Request,
+    key: str = Form(...),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if _valid_csrf(request, csrf_token, settings):
+        service = RuntimeSettingsService(ServiceSettingRepository(session), settings)
+        await service.clear(key)
+        await _audit(
+            session,
+            admin,
+            request,
+            "service_setting",
+            None,
+            f"clear:{key}",
+            {"key": key},
+            None,
+        )
+    return _redirect("/admin/tokens?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/admin/monitors", response_class=HTMLResponse)
+async def admin_monitors_page(
+    request: Request,
+    monitor_status: MonitorStatus | None = Query(default=None, alias="status"),
+    user_id: int | None = Query(default=None),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    filters = []
+    if monitor_status is not None:
+        filters.append(MonitorModel.status == monitor_status)
+    if user_id is not None:
+        filters.append(MonitorModel.user_id == user_id)
+    total = (
+        await session.scalar(select(func.count()).select_from(MonitorModel).where(*filters))
+        or 0
+    )
+    result = await session.execute(
+        select(MonitorModel)
+        .where(*filters)
+        .order_by(MonitorModel.created_at.desc(), MonitorModel.id.desc())
+        .limit(200)
+    )
+    monitors = list(result.scalars().all())
+    return _render(
+        request,
+        "admin/monitors.html",
+        {
+            "title": "Все мониторинги",
+            "user": admin,
+            "monitors": monitors,
+            "total": total,
+            "statuses": list(MonitorStatus),
+            "status_filter": monitor_status,
+            "user_id": user_id or "",
+        },
+        settings,
+    )
+
+
+@router.get("/admin/monitors/{monitor_id}", response_class=HTMLResponse)
+async def admin_monitor_detail(
+    monitor_id: int,
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    monitor = await MonitorRepository(session).get(monitor_id)
+    if monitor is None:
+        return _redirect("/admin/monitors?error=not_found", status.HTTP_303_SEE_OTHER)
+    checks_result = await session.execute(
+        select(PriceCheckModel)
+        .where(PriceCheckModel.monitor_id == monitor.id)
+        .order_by(PriceCheckModel.checked_at.desc(), PriceCheckModel.id.desc())
+        .limit(25)
+    )
+    errors_result = await session.execute(
+        select(ParserErrorModel)
+        .where(ParserErrorModel.monitor_id == monitor.id)
+        .order_by(ParserErrorModel.occurred_at.desc(), ParserErrorModel.id.desc())
+        .limit(25)
+    )
+    return _render(
+        request,
+        "admin/monitor_detail.html",
+        {
+            "title": f"Мониторинг #{monitor.id}",
+            "user": admin,
+            "monitor": monitor,
+            "history": list(checks_result.scalars().all()),
+            "parser_errors": list(errors_result.scalars().all()),
+            "statuses": [MonitorStatus.ACTIVE, MonitorStatus.PAUSED, MonitorStatus.DISABLED],
+        },
+        settings,
+    )
+
+
+@router.post("/admin/monitors/{monitor_id}/action", response_class=HTMLResponse)
+async def admin_monitor_action(
+    monitor_id: int,
+    request: Request,
+    action: str = Form(...),
+    monitor_status: MonitorStatus | None = Form(None, alias="status"),
+    csrf_token: str = Form(...),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    if not _valid_csrf(request, csrf_token, settings):
+        return _redirect(f"/admin/monitors/{monitor_id}?error=csrf", status.HTTP_303_SEE_OTHER)
+    repository = MonitorRepository(session)
+    monitor = await repository.get(monitor_id)
+    if monitor is None:
+        return _redirect("/admin/monitors?error=not_found", status.HTTP_303_SEE_OTHER)
+    old_values = {"status": monitor.status.value, "next_check_at": str(monitor.next_check_at)}
+    if action == "status" and monitor_status is not None:
+        await repository.update(monitor, {"status": monitor_status})
+    elif action == "delete":
+        await repository.soft_delete(monitor)
+    elif action == "check":
+        await enqueue_monitor_check(settings.redis_url, monitor.id)
+    else:
+        return _redirect(f"/admin/monitors/{monitor_id}?error=action", status.HTTP_303_SEE_OTHER)
+    await _audit(
+        session,
+        admin,
+        request,
+        "monitor",
+        monitor.id,
+        action,
+        old_values,
+        {"status": monitor.status.value, "next_check_at": str(monitor.next_check_at)},
+    )
+    return _redirect(f"/admin/monitors/{monitor_id}?saved=1", status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/admin/notifications", response_class=HTMLResponse)
+async def admin_notifications_page(
+    request: Request,
+    notification_status: NotificationStatus | None = Query(default=None, alias="status"),
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    filters = [NotificationModel.status == notification_status] if notification_status else []
+    result = await session.execute(
+        select(NotificationModel)
+        .where(*filters)
+        .order_by(NotificationModel.created_at.desc(), NotificationModel.id.desc())
+        .limit(200)
+    )
+    return _render(
+        request,
+        "admin/notifications.html",
+        {
+            "title": "Уведомления",
+            "user": admin,
+            "notifications": list(result.scalars().all()),
+            "statuses": list(NotificationStatus),
+            "status_filter": notification_status,
+        },
+        settings,
+    )
+
+
+@router.get("/admin/errors", response_class=HTMLResponse)
+async def admin_errors_page(
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    parser_result = await session.execute(
+        select(ParserErrorModel)
+        .order_by(ParserErrorModel.occurred_at.desc(), ParserErrorModel.id.desc())
+        .limit(100)
+    )
+    check_result = await session.execute(
+        select(PriceCheckModel)
+        .where(PriceCheckModel.status != CheckStatus.SUCCESS)
+        .order_by(PriceCheckModel.checked_at.desc(), PriceCheckModel.id.desc())
+        .limit(100)
+    )
+    return _render(
+        request,
+        "admin/errors.html",
+        {
+            "title": "Ошибки",
+            "user": admin,
+            "parser_errors": list(parser_result.scalars().all()),
+            "failed_checks": list(check_result.scalars().all()),
+        },
+        settings,
+    )
+
+
 async def _current_user(
     request: Request,
     users: UserRepository,
@@ -439,6 +926,52 @@ async def _require_user(
     if user is None:
         raise WebRedirect("/login")
     return user
+
+
+async def _require_admin(
+    request: Request,
+    users: UserRepository,
+    settings: Settings,
+) -> UserModel:
+    user = await _require_user(request, users, settings)
+    if user.role != UserRole.ADMIN:
+        raise WebRedirect("/monitors")
+    return user
+
+
+async def _audit(
+    session: AsyncSession,
+    user: UserModel,
+    request: Request,
+    entity_type: str,
+    entity_id: int | None,
+    action: str,
+    old_values: dict[str, Any] | None,
+    new_values: dict[str, Any] | None,
+) -> None:
+    session.add(
+        AuditLogModel(
+            user_id=user.id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            old_values=old_values,
+            new_values=new_values,
+        )
+    )
+    await session.commit()
+
+
+def _user_audit(user: UserModel) -> dict[str, Any]:
+    return {
+        "email": user.email,
+        "role": user.role.value,
+        "status": user.status.value,
+        "notifications_enabled": user.notifications_enabled,
+        "default_notification_channel": user.default_notification_channel,
+    }
 
 
 def _render(
@@ -683,6 +1216,17 @@ MARKETPLACE_LABELS = {
     Marketplace.UNKNOWN: "Неизвестно",
 }
 
+USER_STATUS_LABELS = {
+    UserStatus.ACTIVE: "Активен",
+    UserStatus.DISABLED: "Отключен",
+    UserStatus.DELETED: "Удален",
+}
+
+USER_ROLE_LABELS = {
+    UserRole.USER: "Пользователь",
+    UserRole.ADMIN: "Администратор",
+}
+
 
 def _enum_label(value: Any, labels: dict[Any, str]) -> str:
     if value is None:
@@ -714,6 +1258,14 @@ def _marketplace_label(value: Any) -> str:
     return _enum_label(value, MARKETPLACE_LABELS)
 
 
+def _user_status_label(value: Any) -> str:
+    return _enum_label(value, USER_STATUS_LABELS)
+
+
+def _user_role_label(value: Any) -> str:
+    return _enum_label(value, USER_ROLE_LABELS)
+
+
 templates.env.filters["money"] = _format_money
 templates.env.filters["dt"] = _format_dt
 templates.env.filters["interval"] = _interval_label
@@ -721,6 +1273,8 @@ templates.env.filters["monitor_status_label"] = _monitor_status_label
 templates.env.filters["check_status_label"] = _check_status_label
 templates.env.filters["availability_label"] = _availability_label
 templates.env.filters["marketplace_label"] = _marketplace_label
+templates.env.filters["user_status_label"] = _user_status_label
+templates.env.filters["user_role_label"] = _user_role_label
 
 
 class WebRedirect(Exception):

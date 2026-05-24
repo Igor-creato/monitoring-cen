@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.domain.enums import UserStatus
+from app.domain.enums import UserRole, UserStatus
 from app.infra.db.base import Base
 from app.infra.db.types import enum_values, utc_now
 
@@ -19,6 +19,11 @@ class UserModel(Base):
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus, native_enum=False, values_callable=enum_values),
         default=UserStatus.ACTIVE,
+        nullable=False,
+    )
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, native_enum=False, values_callable=enum_values),
+        default=UserRole.USER,
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

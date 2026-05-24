@@ -6,6 +6,7 @@ from app.infra.db.models.price_check import PriceCheckModel
 from app.infra.db.models.price_check_daily_stat import PriceCheckDailyStatModel
 from app.infra.db.models.product import ProductModel
 from app.infra.db.models.product_source import ProductSourceModel
+from app.infra.db.models.service_setting import ServiceSettingModel
 from app.infra.db.models.user import UserModel
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "ProductSourceModel",
     "PriceCheckDailyStatModel",
     "PriceCheckModel",
+    "ServiceSettingModel",
     "UserModel",
 ]
