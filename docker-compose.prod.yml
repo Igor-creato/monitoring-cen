@@ -1,6 +1,8 @@
 services:
   traefik:
     image: traefik:v3.3
+    profiles:
+      - bundled-traefik
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -38,9 +40,9 @@ services:
       - traefik.enable=true
       - traefik.docker.network=${TRAEFIK_PUBLIC_NETWORK:-price-monitor-public}
       - traefik.http.routers.price-monitor.rule=Host(`${APP_DOMAIN}`)
-      - traefik.http.routers.price-monitor.entrypoints=websecure
+      - traefik.http.routers.price-monitor.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.price-monitor.tls=true
-      - traefik.http.routers.price-monitor.tls.certresolver=letsencrypt
+      - traefik.http.routers.price-monitor.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
       - traefik.http.services.price-monitor.loadbalancer.server.port=8000
     mem_limit: 768m
     cpus: 0.75
@@ -75,3 +77,4 @@ networks:
     internal: true
   public:
     name: ${TRAEFIK_PUBLIC_NETWORK:-price-monitor-public}
+    external: ${TRAEFIK_PUBLIC_NETWORK_EXTERNAL:-false}

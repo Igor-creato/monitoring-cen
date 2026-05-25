@@ -51,6 +51,29 @@ prompt_secret() {
     printf "%s" "$value"
 }
 
+prompt_bool() {
+    label="$1"
+    default="$2"
+    value=""
+    while [ -z "$value" ]; do
+        printf "%s [%s]: " "$label" "$default" >&2
+        IFS= read -r value
+        if [ -z "$value" ]; then
+            value="$default"
+        fi
+        case "$value" in
+            true|false) ;;
+            y|Y|yes|YES|Yes) value="true" ;;
+            n|N|no|NO|No) value="false" ;;
+            *)
+                echo "Enter true or false." >&2
+                value=""
+                ;;
+        esac
+    done
+    printf "%s" "$value"
+}
+
 random_hex() {
     bytes="$1"
     if command -v openssl >/dev/null 2>&1; then
@@ -89,8 +112,12 @@ APP_ENV_FILE=.env.prod
 APP_DEBUG=false
 APP_NAME=price-monitor
 APP_DOMAIN=$APP_DOMAIN
+COMPOSE_PROFILES=$COMPOSE_PROFILES_VALUE
 LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL
-TRAEFIK_PUBLIC_NETWORK=price-monitor-public
+TRAEFIK_PUBLIC_NETWORK=$TRAEFIK_PUBLIC_NETWORK
+TRAEFIK_PUBLIC_NETWORK_EXTERNAL=$TRAEFIK_PUBLIC_NETWORK_EXTERNAL
+TRAEFIK_ENTRYPOINT=$TRAEFIK_ENTRYPOINT
+TRAEFIK_CERT_RESOLVER=$TRAEFIK_CERT_RESOLVER
 
 MARIADB_DATABASE=price_monitor
 MARIADB_USER=price_monitor
@@ -179,6 +206,23 @@ EMAIL_SMTP_USER="$(prompt_required "SMTP username")"
 EMAIL_SMTP_PASSWORD="$(prompt_secret "SMTP password")"
 EMAIL_SMTP_FROM="$(prompt_default "SMTP from email" "$EMAIL_SMTP_USER")"
 EMAIL_SMTP_USE_TLS="$(prompt_default "Use SMTP STARTTLS? true/false" "true")"
+USE_EXISTING_TRAEFIK="$(prompt_bool "Use an existing Traefik on this server? true/false" "true")"
+
+if [ "$USE_EXISTING_TRAEFIK" = "true" ]; then
+    TRAEFIK_PUBLIC_NETWORK="$(prompt_required "Existing Traefik Docker network name")"
+    TRAEFIK_PUBLIC_NETWORK_EXTERNAL="true"
+    TRAEFIK_ENTRYPOINT="$(prompt_default "Traefik HTTPS entrypoint" "websecure")"
+    TRAEFIK_CERT_RESOLVER="$(prompt_default "Traefik certificate resolver" "letsencrypt")"
+    COMPOSE_PROFILES_VALUE=""
+    COMPOSE_PROFILES=""
+else
+    TRAEFIK_PUBLIC_NETWORK="$(prompt_default "Bundled Traefik Docker network name" "price-monitor-public")"
+    TRAEFIK_PUBLIC_NETWORK_EXTERNAL="false"
+    TRAEFIK_ENTRYPOINT="websecure"
+    TRAEFIK_CERT_RESOLVER="letsencrypt"
+    COMPOSE_PROFILES_VALUE="bundled-traefik"
+    COMPOSE_PROFILES="--profile bundled-traefik"
+fi
 
 MARIADB_PASSWORD="$(random_hex 24)"
 MARIADB_ROOT_PASSWORD="$(random_hex 24)"
@@ -211,7 +255,7 @@ fi
 
 write_env ".env.prod"
 
-docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml $COMPOSE_PROFILES up -d --build --remove-orphans
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
 
 echo

@@ -67,10 +67,26 @@ The script asks for:
 - Let's Encrypt email (`LETSENCRYPT_EMAIL`);
 - admin email list (`ADMIN_EMAILS`);
 - SMTP host, port, username, password, sender email, and STARTTLS flag.
+- whether to use an existing Traefik on the server.
 
 It clones the repository to `$HOME/price-monitor` by default, writes `.env.prod`
 with generated secrets, starts the Docker Compose production stack, and runs the
 smoke test against `https://$APP_DOMAIN`.
+
+If another Traefik already owns ports `80` and `443`, answer `true` for existing
+Traefik and enter the Docker network used by that Traefik. Find it with:
+
+```bash
+docker network ls
+docker inspect <traefik-container-name> --format '{{json .NetworkSettings.Networks}}'
+```
+
+The app will not start its own Traefik in this mode. It will attach the API
+container to the existing Traefik network and expose Traefik labels for
+`APP_DOMAIN`.
+
+If this is a fresh server with no Traefik, answer `false`. The bundled Traefik
+profile will bind `80` and `443`.
 
 Optional bootstrap overrides:
 
@@ -148,7 +164,7 @@ docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod
 Restore drill:
 
 ```bash
-gunzip -c /opt/price-monitor/backups/<backup>.sql.gz | docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec -T mariadb \
+gunzip -c /home/igor/price-monitor/backups/<backup>.sql.gz | docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec -T mariadb \
   sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"'
 ```
 
