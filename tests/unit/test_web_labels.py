@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,16 @@ def test_new_monitor_template_contains_marketplace_select() -> None:
 
     assert 'name="marketplace"' in template
     assert "Сейчас доступен мониторинг Wildberries." in template
+
+
+def test_python_package_includes_web_static_assets() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    setuptools_config = pyproject["tool"]["setuptools"]
+
+    assert setuptools_config["package-dir"][""] == "backend"
+    assert setuptools_config["packages"]["find"]["where"] == ["backend"]
+    assert "web/static/*" in setuptools_config["package-data"]["app"]
+    assert "web/templates/**/*.html" in setuptools_config["package-data"]["app"]
 
 
 def test_admin_runtime_and_notification_labels_are_russian() -> None:

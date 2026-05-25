@@ -12,6 +12,15 @@ echo "health ok"
 curl -fsS "${BASE_URL}/ready" >/dev/null
 echo "ready ok"
 
+curl -fsS "${BASE_URL}/login" >/dev/null
+echo "login page ok"
+
+curl -fsS "${BASE_URL}/static/app.css" | grep -q ".app-shell"
+echo "styles ok"
+
+curl -fsS "${BASE_URL}/static/app.js" | grep -q "data-loading"
+echo "scripts ok"
+
 if curl -fsS "${BASE_URL}/metrics" >/dev/null 2>&1; then
   echo "metrics ok"
 else
