@@ -115,6 +115,7 @@ jobs:
           script_stop: true
           script: |
             cd "${{ secrets.VPS_APP_DIR }}"
+            git config --global --add safe.directory "${{ secrets.VPS_APP_DIR }}"
             git pull --ff-only origin master
             docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
             APP_DOMAIN="$(grep -E '^APP_DOMAIN=' .env.prod | tail -n 1 | cut -d= -f2-)"
