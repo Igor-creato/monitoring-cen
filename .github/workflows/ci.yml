@@ -66,7 +66,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan API image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: price-monitor-api:${{ github.sha }}
           format: sarif
@@ -75,7 +75,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan worker image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: price-monitor-worker:${{ github.sha }}
           format: sarif
