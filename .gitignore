@@ -14,6 +14,7 @@ tests/**/*.py
 !tests/unit/test_wildberries_direct_provider.py
 !tests/unit/test_monitor_service.py
 !tests/unit/test_web_labels.py
+!tests/unit/test_deployment_config.py
 .mypy_cache/
 .ruff_cache/
 .coverage

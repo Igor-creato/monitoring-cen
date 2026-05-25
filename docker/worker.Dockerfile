@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,11 +8,10 @@ WORKDIR /app
 ENV PYTHONPATH=/app/backend
 
 COPY pyproject.toml /app/pyproject.toml
-RUN pip install --upgrade pip && pip install /app
-
 COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY backend /app/backend
+RUN pip install --upgrade pip && pip install /app
 
 RUN useradd --create-home --uid 1001 appuser \
     && chown -R appuser:appuser /app
