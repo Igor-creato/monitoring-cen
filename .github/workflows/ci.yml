@@ -112,8 +112,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_PORT || '22' }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
           script: |
+            set -e
             cd "${{ secrets.VPS_APP_DIR }}"
             git config --global --add safe.directory "${{ secrets.VPS_APP_DIR }}"
             git pull --ff-only origin master

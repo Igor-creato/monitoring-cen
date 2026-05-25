@@ -15,3 +15,17 @@ def test_sarif_upload_steps_skip_missing_scan_outputs() -> None:
 
     assert "hashFiles('trivy-api.sarif') != ''" in workflow
     assert "hashFiles('trivy-worker.sarif') != ''" in workflow
+
+
+def test_ssh_deploy_script_uses_supported_failure_handling() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "script_stop:" not in workflow
+    assert "script: |\n            set -e" in workflow
+
+
+def test_smoke_retries_public_endpoints_after_container_recreate() -> None:
+    smoke = Path("scripts/smoke.sh").read_text(encoding="utf-8")
+
+    assert "SMOKE_RETRIES" in smoke
+    assert "until [ \"$attempt\" -ge \"$SMOKE_RETRIES\" ]" in smoke
