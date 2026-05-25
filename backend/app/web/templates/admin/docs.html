@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Пошаговые инструкции</p>
+    <h1>Документация администратора</h1>
+  </div>
+  <div class="actions">
+    <a class="button button-secondary" href="/admin/tokens">К настройкам</a>
+    <a class="button button-secondary" href="/admin">К админке</a>
+  </div>
+</section>
+
+<article class="docs-page">
+  <section class="docs-section">
+    <p class="eyebrow">Wildberries напрямую</p>
+    <h2>Какие поля заполнить</h2>
+    <p>
+      Для обычного мониторинга Wildberries используйте поставщика данных
+      <code>wildberries_direct</code>. Apify и Zyte для этого сценария не нужны.
+    </p>
+
+    <div class="docs-callout">
+      <strong>Перед сохранением прокси</strong>
+      <span>
+        Убедитесь, что на сервере задан <code>ADMIN_SECRETS_KEY</code>. Без него секретные
+        поля, включая прокси, не сохраняются из админки.
+      </span>
+    </div>
+
+    <div class="docs-table-wrap">
+      <table class="docs-table">
+        <thead>
+          <tr>
+            <th>Поле в админке</th>
+            <th>Что добавить</th>
+            <th>Откуда взять</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Поставщик данных о товарах</td>
+            <td><code>wildberries_direct</code></td>
+            <td>Это встроенный прямой провайдер Wildberries.</td>
+          </tr>
+          <tr>
+            <td>Регион доставки Wildberries</td>
+            <td><code>-1257786</code></td>
+            <td>Оставьте значение по умолчанию, если не меняете регион доставки.</td>
+          </tr>
+          <tr>
+            <td>Таймаут запроса Wildberries</td>
+            <td><code>60</code></td>
+            <td>Оставьте 60 секунд для стабильных проверок через сеть или прокси.</td>
+          </tr>
+          <tr>
+            <td>Максимальный номер basket Wildberries</td>
+            <td><code>20</code></td>
+            <td>Оставьте 20, чтобы проверять стандартный диапазон basket-хостов.</td>
+          </tr>
+          <tr>
+            <td>Прокси Wildberries</td>
+            <td><code>http://login:password@proxy.example.com:8000</code></td>
+            <td>Возьмите HTTP/HTTPS proxy URL в кабинете любого купленного proxy-провайдера.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="docs-section">
+    <h2>Как заполнить настройки</h2>
+    <ol class="docs-steps">
+      <li>
+        <span>Откройте страницу <a href="/admin/tokens">Токены и настройки провайдеров</a>.</span>
+      </li>
+      <li>
+        <span>В поле “Настройка” выберите нужное поле из таблицы выше.</span>
+      </li>
+      <li>
+        <span>В поле “Новое значение” вставьте значение без лишних пробелов.</span>
+      </li>
+      <li>
+        <span>Нажмите “Сохранить” и дождитесь сообщения “Настройки сохранены”.</span>
+      </li>
+      <li>
+        <span>
+          Проверьте блок “Текущие значения”: обычные поля видны полностью, секреты
+          показываются только в замаскированном виде.
+        </span>
+      </li>
+    </ol>
+  </section>
+
+  <section class="docs-section">
+    <h2>Как подключить прокси Wildberries</h2>
+    <ol class="docs-steps">
+      <li>
+        <span>
+          Купите или откройте уже выданный HTTP/HTTPS прокси в личном кабинете
+          proxy-провайдера.
+        </span>
+      </li>
+      <li>
+        <span>
+          Скопируйте строку подключения. Поддерживаемые форматы:
+          <code>http://user:password@host:port</code> или <code>http://host:port</code>.
+        </span>
+      </li>
+      <li>
+        <span>В админке выберите поле “Прокси Wildberries”.</span>
+      </li>
+      <li>
+        <span>
+          Вставьте прокси, например
+          <code>http://login:password@proxy.example.com:8000</code>, и сохраните.
+        </span>
+      </li>
+      <li>
+        <span>
+          После сохранения прокси не отображается обратно полностью. Это нормально:
+          поле секретное и хранится в зашифрованном виде.
+        </span>
+      </li>
+    </ol>
+  </section>
+</article>
+{% endblock %}

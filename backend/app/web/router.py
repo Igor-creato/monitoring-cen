@@ -624,6 +624,21 @@ async def admin_dashboard(
     )
 
 
+@router.get("/admin/docs", response_class=HTMLResponse)
+async def admin_docs_page(
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    admin = await _require_admin(request, users, settings)
+    return _render(
+        request,
+        "admin/docs.html",
+        {"title": "Документация", "user": admin},
+        settings,
+    )
+
+
 @router.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(
     request: Request,

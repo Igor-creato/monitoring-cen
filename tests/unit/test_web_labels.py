@@ -133,3 +133,29 @@ def test_admin_templates_do_not_show_raw_english_operational_labels() -> None:
 
     for text in forbidden:
         assert text not in combined
+
+
+def test_admin_dashboard_and_tokens_link_to_documentation() -> None:
+    dashboard_template = Path("backend/app/web/templates/admin/dashboard.html").read_text(
+        encoding="utf-8"
+    )
+    tokens_template = Path("backend/app/web/templates/admin/tokens.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'href="/admin/docs"' in dashboard_template
+    assert 'href="/admin/docs"' in tokens_template
+
+
+def test_admin_docs_template_contains_wildberries_setup_guide() -> None:
+    template = Path("backend/app/web/templates/admin/docs.html").read_text(encoding="utf-8")
+
+    required_texts = [
+        "Прокси Wildberries",
+        "wildberries_direct",
+        "http://login:password@proxy.example.com:8000",
+        "ADMIN_SECRETS_KEY",
+    ]
+
+    for text in required_texts:
+        assert text in template
