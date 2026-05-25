@@ -48,6 +48,13 @@ def test_python_package_includes_web_static_assets() -> None:
     assert "web/templates/**/*.html" in setuptools_config["package-data"]["app"]
 
 
+def test_base_template_uses_proxy_safe_static_paths() -> None:
+    template = Path("backend/app/web/templates/base.html").read_text(encoding="utf-8")
+
+    assert "request.app.url_path_for('static'" in template
+    assert "url_for('static'" not in template
+
+
 def test_admin_runtime_and_notification_labels_are_russian() -> None:
     template = templates.env.from_string(
         "{{ setting.key|runtime_setting_label }}|"
