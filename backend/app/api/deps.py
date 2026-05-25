@@ -12,15 +12,18 @@ from app.infra.db.models.user import UserModel
 from app.infra.db.session import async_session_factory
 from app.infra.http import create_http_client
 from app.infra.security import decode_jwt
+from app.notifications.email import EmailProvider
 from app.product_fetching.factory import create_product_provider
 from app.repositories.monitor_repository import MonitorRepository
 from app.repositories.notification_repository import NotificationRepository
+from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.price_check_repository import PriceCheckRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.service_setting_repository import ServiceSettingRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.services.monitor_service import MonitorService
+from app.services.password_reset_email import PasswordResetEmailSender
 from app.services.price_check_service import PriceCheckService
 from app.services.product_service import ProductService
 from app.services.runtime_settings import resolve_internal_api_token, resolve_runtime_settings
@@ -55,6 +58,12 @@ def get_user_repository(
     session: AsyncSession = Depends(get_db_session),
 ) -> UserRepository:
     return UserRepository(session)
+
+
+def get_password_reset_token_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> PasswordResetTokenRepository:
+    return PasswordResetTokenRepository(session)
 
 
 def get_product_repository(
@@ -102,9 +111,25 @@ async def get_price_check_service(
 
 def get_auth_service(
     user_repository: UserRepository = Depends(get_user_repository),
+    password_reset_tokens: PasswordResetTokenRepository = Depends(
+        get_password_reset_token_repository
+    ),
     settings: Settings = Depends(get_settings),
 ) -> AuthService:
-    return AuthService(user_repository, settings)
+    email_provider = EmailProvider(
+        smtp_host=settings.email_smtp_host,
+        smtp_port=settings.email_smtp_port,
+        username=settings.email_smtp_user,
+        password=settings.email_smtp_password,
+        from_email=settings.email_smtp_from,
+        use_tls=settings.email_smtp_use_tls,
+    )
+    return AuthService(
+        user_repository,
+        settings,
+        password_reset_tokens=password_reset_tokens,
+        password_reset_sender=PasswordResetEmailSender(email_provider),
+    )
 
 
 def get_product_service(

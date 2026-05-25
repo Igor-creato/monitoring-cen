@@ -2,6 +2,7 @@ from app.infra.db.models.audit_log import AuditLogModel
 from app.infra.db.models.monitor import MonitorModel
 from app.infra.db.models.notification import NotificationModel
 from app.infra.db.models.parser_error import ParserErrorModel
+from app.infra.db.models.password_reset_token import PasswordResetTokenModel
 from app.infra.db.models.price_check import PriceCheckModel
 from app.infra.db.models.price_check_daily_stat import PriceCheckDailyStatModel
 from app.infra.db.models.product import ProductModel
@@ -14,6 +15,7 @@ __all__ = [
     "MonitorModel",
     "NotificationModel",
     "ParserErrorModel",
+    "PasswordResetTokenModel",
     "ProductModel",
     "ProductSourceModel",
     "PriceCheckDailyStatModel",

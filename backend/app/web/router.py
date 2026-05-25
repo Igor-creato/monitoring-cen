@@ -23,7 +23,12 @@ from app.api.deps import (
     get_settings,
     get_user_repository,
 )
-from app.api.v1.schemas.auth import LoginRequest, RegisterRequest
+from app.api.v1.schemas.auth import (
+    LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    RegisterRequest,
+)
 from app.api.v1.schemas.monitor import MonitorCreateRequest, MonitorUpdateRequest
 from app.common.clock import utc_now
 from app.domain.enums import (
@@ -127,12 +132,18 @@ async def register_submit(
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     request: Request,
+    reset: str | None = Query(default=None),
     users: UserRepository = Depends(get_user_repository),
     settings: Settings = Depends(get_settings),
 ) -> Response:
     if await _current_user(request, users, settings):
         return _redirect("/monitors")
-    return _render(request, "auth/login.html", {"title": "Вход"}, settings)
+    return _render(
+        request,
+        "auth/login.html",
+        {"title": "Вход", "reset_success": reset == "success"},
+        settings,
+    )
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -158,6 +169,119 @@ async def login_submit(
     _set_auth_cookie(response, token, settings)
     _rotate_csrf(response, settings)
     return response
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    if await _current_user(request, users, settings):
+        return _redirect("/monitors")
+    return _render(
+        request,
+        "auth/forgot_password.html",
+        {"title": "Восстановление пароля", "submitted": False},
+        settings,
+    )
+
+
+@router.post("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_submit(
+    request: Request,
+    email: str = Form(...),
+    csrf_token: str = Form(...),
+    service: AuthService = Depends(get_auth_service),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    if not _valid_csrf(request, csrf_token, settings):
+        return _form_error(
+            request,
+            "auth/forgot_password.html",
+            "Сессия формы устарела.",
+            settings,
+            {"email": email},
+        )
+
+    try:
+        payload = PasswordResetRequest(email=email.strip())
+    except ValidationError as exc:
+        return _form_error(
+            request,
+            "auth/forgot_password.html",
+            _validation_message(exc),
+            settings,
+            {"email": email},
+        )
+
+    await service.request_password_reset(payload.email, base_url=_request_origin(request))
+    return _render(
+        request,
+        "auth/forgot_password.html",
+        {
+            "title": "Восстановление пароля",
+            "submitted": True,
+            "form": {"email": email},
+        },
+        settings,
+    )
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(
+    request: Request,
+    token: str = Query(""),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    return _render(
+        request,
+        "auth/reset_password.html",
+        {"title": "Новый пароль", "form": {"token": token}},
+        settings,
+    )
+
+
+@router.post("/reset-password", response_class=HTMLResponse)
+async def reset_password_submit(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(...),
+    service: AuthService = Depends(get_auth_service),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    form = {"token": token}
+    if not _valid_csrf(request, csrf_token, settings):
+        return _form_error(
+            request,
+            "auth/reset_password.html",
+            "Сессия формы устарела.",
+            settings,
+            form,
+        )
+
+    try:
+        payload = PasswordResetConfirmRequest(token=token, password=password)
+        await service.confirm_password_reset(payload.token, payload.password)
+    except ValidationError as exc:
+        return _form_error(
+            request,
+            "auth/reset_password.html",
+            _validation_message(exc),
+            settings,
+            form,
+        )
+    except AuthenticationError:
+        return _form_error(
+            request,
+            "auth/reset_password.html",
+            "Ссылка для сброса пароля недействительна или устарела.",
+            settings,
+            form,
+        )
+
+    return _redirect("/login?reset=success", status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/logout")
@@ -1050,6 +1174,10 @@ def _not_found(request: Request, user: UserModel, settings: Settings) -> Respons
 
 def _redirect(url: str, status_code: int = status.HTTP_302_FOUND) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status_code)
+
+
+def _request_origin(request: Request) -> str:
+    return f"{request.url.scheme}://{request.url.netloc}"
 
 
 def _set_auth_cookie(response: Response, token: str, settings: Settings) -> None:

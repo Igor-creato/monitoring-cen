@@ -63,6 +63,22 @@ def test_base_template_contains_visible_logout_button() -> None:
     assert "logout-button" in template
     assert ">↗</button>" not in template
 
+
+def test_login_template_links_to_forgot_password() -> None:
+    template = Path("backend/app/web/templates/auth/login.html").read_text(encoding="utf-8")
+
+    assert 'href="/forgot-password"' in template
+    assert "Забыли пароль?" in template
+
+
+def test_password_reset_templates_include_csrf_fields() -> None:
+    forgot_template = Path("backend/app/web/templates/auth/forgot_password.html")
+    reset_template = Path("backend/app/web/templates/auth/reset_password.html")
+
+    assert 'name="csrf_token"' in forgot_template.read_text(encoding="utf-8")
+    assert 'name="csrf_token"' in reset_template.read_text(encoding="utf-8")
+
+
 def test_admin_runtime_and_notification_labels_are_russian() -> None:
     template = templates.env.from_string(
         "{{ setting.key|runtime_setting_label }}|"

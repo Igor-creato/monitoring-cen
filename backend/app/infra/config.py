@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
     app_debug: bool = True
     app_name: str = "price-monitor"
+    app_base_url: str | None = None
 
     database_url: str = "mysql+asyncmy://app:app@mariadb:3306/app?charset=utf8mb4"
     redis_url: str = "redis://redis:6379/0"
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(default="change-me-in-production", repr=False)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    password_reset_token_expire_minutes: int = 60
     password_hash_iterations: int = 260_000
     internal_api_token: str | None = Field(default=None, repr=False)
     admin_emails: str = ""

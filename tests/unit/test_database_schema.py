@@ -13,6 +13,7 @@ def test_all_monitoring_tables_are_registered() -> None:
         "monitors",
         "notifications",
         "parser_errors",
+        "password_reset_tokens",
         "price_check_daily_stats",
         "price_checks",
         "product_sources",
@@ -75,3 +76,13 @@ def test_notifications_have_dedup_constraint() -> None:
         "channel",
         "dedupe_key",
     )
+
+
+def test_password_reset_token_indexes_exist() -> None:
+    table = Base.metadata.tables["password_reset_tokens"]
+
+    indexes = {index.name: tuple(column.name for column in index.columns) for index in table.indexes}
+
+    assert indexes["ix_password_reset_tokens_token_hash"] == ("token_hash",)
+    assert indexes["ix_password_reset_tokens_user_id"] == ("user_id",)
+    assert indexes["ix_password_reset_tokens_expires_at"] == ("expires_at",)

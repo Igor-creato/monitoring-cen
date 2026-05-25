@@ -13,6 +13,9 @@
     {% if error %}
       <div class="alert alert-error" role="alert">{{ error }}</div>
     {% endif %}
+    {% if reset_success %}
+      <div class="alert alert-success" role="status">Пароль обновлен. Теперь можно войти.</div>
+    {% endif %}
 
     <label class="field">
       <span>Email</span>
@@ -30,6 +33,7 @@
       <span class="spinner" aria-hidden="true"></span>
     </button>
 
+    <p class="form-note"><a href="/forgot-password">Забыли пароль?</a></p>
     <p class="form-note">Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
   </form>
 </section>

@@ -1,7 +1,15 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_auth_service
-from app.api.v1.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.api.v1.schemas.auth import (
+    LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from app.api.v1.schemas.error import ErrorResponse
 from app.services.auth_service import AuthService
 
@@ -51,3 +59,39 @@ async def login(
         expires_at=expires_at,
         user=UserResponse.model_validate(user),
     )
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=PasswordResetRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request password reset",
+    description="Sends a password reset email when the account exists.",
+    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+)
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> PasswordResetRequestResponse:
+    await service.request_password_reset(payload.email)
+    return PasswordResetRequestResponse(
+        message="If this email is registered, password reset instructions will be sent.",
+    )
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Confirm password reset",
+    description="Sets a new password using a valid one-time reset token.",
+    responses={
+        401: {"model": ErrorResponse, "description": "Invalid reset token"},
+        **ERROR_RESPONSES,
+    },
+)
+async def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> Response:
+    await service.confirm_password_reset(payload.token, payload.password)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

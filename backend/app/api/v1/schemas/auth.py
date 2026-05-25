@@ -25,6 +25,24 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128, description="Plain password")
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(
+        min_length=3,
+        max_length=320,
+        pattern=EMAIL_PATTERN,
+        description="User email",
+    )
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=512, description="Password reset token")
+    password: str = Field(min_length=8, max_length=128, description="New plain password")
+
+
+class PasswordResetRequestResponse(BaseModel):
+    message: str
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
