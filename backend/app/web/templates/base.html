@@ -23,7 +23,7 @@
         </nav>
         <form method="post" action="/logout" class="logout-form" data-loading>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button class="icon-button" type="submit" title="Выйти" aria-label="Выйти">↗</button>
+          <button class="logout-button" type="submit">Выйти</button>
         </form>
       {% endif %}
     </header>

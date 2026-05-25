@@ -29,3 +29,17 @@ def test_smoke_retries_public_endpoints_after_container_recreate() -> None:
 
     assert "SMOKE_RETRIES" in smoke
     assert "until [ \"$attempt\" -ge \"$SMOKE_RETRIES\" ]" in smoke
+
+def test_bootstrap_creates_primary_admin_and_prints_credentials() -> None:
+    script = Path("scripts/bootstrap-vps.sh").read_text(encoding="utf-8")
+
+    assert 'PRIMARY_ADMIN_EMAIL="$(first_csv_item "$ADMIN_EMAILS")"' in script
+    assert 'ADMIN_PASSWORD="$(random_password)"' in script
+    assert "bootstrap_admin" in script
+    assert "UserModel(" in script
+    assert "role=UserRole.ADMIN" in script
+    assert "status=UserStatus.ACTIVE" in script
+    assert "user.role = UserRole.ADMIN" in script
+    assert "user.status = UserStatus.ACTIVE" in script
+    assert 'echo "Admin login: $PRIMARY_ADMIN_EMAIL"' in script
+    assert 'echo "Admin password: $ADMIN_PASSWORD"' in script

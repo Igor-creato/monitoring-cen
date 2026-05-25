@@ -95,12 +95,87 @@ random_fernet_key() {
     fi
 }
 
+random_password() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl rand -base64 24 | tr '+/' '-_' | tr -d '='
+    else
+        echo "openssl or python3 is required to generate admin password." >&2
+        exit 1
+    fi
+}
+
+first_csv_item() {
+    python3 - "$1" <<'PY'
+import sys
+
+for item in sys.argv[1].split(","):
+    item = item.strip()
+    if item:
+        print(item)
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 require_command() {
     command_name="$1"
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "$command_name is required. Install it and run this script again." >&2
         exit 1
     fi
+}
+
+bootstrap_admin() {
+    docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml $COMPOSE_PROFILES exec \
+        -T \
+        -e PRIMARY_ADMIN_EMAIL="$PRIMARY_ADMIN_EMAIL" \
+        -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+        api \
+        python - <<'PY'
+import asyncio
+import os
+
+from sqlalchemy import select
+
+from app.domain.enums import UserRole, UserStatus
+from app.infra.config import get_settings
+from app.infra.db.models.user import UserModel
+from app.infra.db.session import async_session_factory
+from app.infra.security import hash_password
+
+
+async def main() -> None:
+    email = os.environ["PRIMARY_ADMIN_EMAIL"].strip().lower()
+    password = os.environ["ADMIN_PASSWORD"]
+    settings = get_settings()
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(UserModel).where(UserModel.email == email))
+        user = result.scalar_one_or_none()
+        password_hash = hash_password(password, settings)
+
+        if user is None:
+            session.add(
+                UserModel(
+                    email=email,
+                    password_hash=password_hash,
+                    role=UserRole.ADMIN,
+                    status=UserStatus.ACTIVE,
+                )
+            )
+        else:
+            user.password_hash = password_hash
+            user.role = UserRole.ADMIN
+            user.status = UserStatus.ACTIVE
+
+        await session.commit()
+
+
+asyncio.run(main())
+PY
 }
 
 write_env() {
@@ -190,6 +265,7 @@ echo
 
 require_command git
 require_command docker
+require_command python3
 
 if ! docker compose version >/dev/null 2>&1; then
     echo "Docker Compose plugin is required. Install it and run this script again." >&2
@@ -199,6 +275,7 @@ fi
 APP_DOMAIN="$(prompt_required "Application domain, for example monitor.example.com")"
 LETSENCRYPT_EMAIL="$(prompt_required "Let's Encrypt email")"
 ADMIN_EMAILS="$(prompt_default "Admin email list, comma-separated" "$LETSENCRYPT_EMAIL")"
+PRIMARY_ADMIN_EMAIL="$(first_csv_item "$ADMIN_EMAILS")"
 
 EMAIL_SMTP_HOST="$(prompt_required "SMTP host")"
 EMAIL_SMTP_PORT="$(prompt_default "SMTP port" "587")"
@@ -229,6 +306,7 @@ MARIADB_ROOT_PASSWORD="$(random_hex 24)"
 JWT_SECRET_KEY="$(random_hex 32)"
 INTERNAL_API_TOKEN="$(random_hex 32)"
 ADMIN_SECRETS_KEY="$(random_fernet_key)"
+ADMIN_PASSWORD="$(random_password)"
 
 if [ ! -d "$APP_DIR/.git" ]; then
     parent_dir="$(dirname "$APP_DIR")"
@@ -256,9 +334,12 @@ fi
 write_env ".env.prod"
 
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml $COMPOSE_PROFILES up -d --build --remove-orphans
+bootstrap_admin
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
 
 echo
 echo "Bootstrap complete."
+echo "Admin login: $PRIMARY_ADMIN_EMAIL"
+echo "Admin password: $ADMIN_PASSWORD"
 echo "Set these GitHub repository secrets for automatic deploys:"
 echo "VPS_HOST, VPS_PORT, VPS_USER, VPS_SSH_KEY, VPS_APP_DIR=$APP_DIR"

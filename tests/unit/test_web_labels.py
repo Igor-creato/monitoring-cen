@@ -55,6 +55,14 @@ def test_base_template_uses_proxy_safe_static_paths() -> None:
     assert "url_for('static'" not in template
 
 
+def test_base_template_contains_visible_logout_button() -> None:
+    template = Path("backend/app/web/templates/base.html").read_text(encoding="utf-8")
+
+    assert 'action="/logout"' in template
+    assert "Выйти" in template
+    assert "logout-button" in template
+    assert ">↗</button>" not in template
+
 def test_admin_runtime_and_notification_labels_are_russian() -> None:
     template = templates.env.from_string(
         "{{ setting.key|runtime_setting_label }}|"
