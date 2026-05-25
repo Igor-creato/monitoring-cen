@@ -51,6 +51,7 @@ services:
     restart: unless-stopped
     networks:
       - internal
+      - egress
     mem_limit: 768m
     cpus: 0.75
 
@@ -78,3 +79,5 @@ networks:
   public:
     name: ${TRAEFIK_PUBLIC_NETWORK:-price-monitor-public}
     external: ${TRAEFIK_PUBLIC_NETWORK_EXTERNAL:-false}
+  egress:
+    name: ${COMPOSE_PROJECT_NAME:-price-monitor}-egress
