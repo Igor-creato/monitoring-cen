@@ -49,7 +49,7 @@ but Wildberries monitoring should use `wildberries_direct` by default.
 Prepare VPS:
 
 - Ubuntu LTS with Docker Engine and Docker Compose plugin.
-- Open inbound ports `22`, `80`, `443`.
+- Open inbound SSH port, `80`, and `443`. If SSH is not on `22`, set `VPS_PORT`.
 - Keep MariaDB and Redis private; do not expose `3306` or `6379`.
 - Minimum: 1 vCPU, 2 GB RAM, 20 GB SSD.
 - Recommended: 2 vCPU, 4 GB RAM, 40 GB SSD.
@@ -58,7 +58,7 @@ First-time bootstrap on the VPS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Igor-creato/monitoring-cen/master/scripts/bootstrap-vps.sh -o /tmp/bootstrap-vps.sh
-sudo sh /tmp/bootstrap-vps.sh
+sh /tmp/bootstrap-vps.sh
 ```
 
 The script asks for:
@@ -68,25 +68,26 @@ The script asks for:
 - admin email list (`ADMIN_EMAILS`);
 - SMTP host, port, username, password, sender email, and STARTTLS flag.
 
-It clones the repository to `/opt/price-monitor` by default, writes `.env.prod`
+It clones the repository to `$HOME/price-monitor` by default, writes `.env.prod`
 with generated secrets, starts the Docker Compose production stack, and runs the
 smoke test against `https://$APP_DOMAIN`.
 
 Optional bootstrap overrides:
 
 ```bash
-APP_DIR=/opt/price-monitor \
-REPO_URL=https://github.com/Igor-creato/monitoring-cen.git \
+APP_DIR=/home/igor/price-monitor \
+REPO_URL=git@github.com:Igor-creato/monitoring-cen.git \
 BRANCH=master \
-sudo -E sh /tmp/bootstrap-vps.sh
+sh /tmp/bootstrap-vps.sh
 ```
 
 Configure GitHub repository secrets after bootstrap:
 
 - `VPS_HOST`: VPS IP address or hostname.
+- `VPS_PORT`: SSH port, for example `56789`.
 - `VPS_USER`: SSH user that can access `VPS_APP_DIR` and run Docker Compose.
 - `VPS_SSH_KEY`: private SSH key for `VPS_USER`.
-- `VPS_APP_DIR`: `/opt/price-monitor`.
+- `VPS_APP_DIR`: full app path, for example `/home/igor/price-monitor`.
 
 Automatic deploys run from the `master` branch after CI, Docker builds, and image
 scans pass.
@@ -94,7 +95,7 @@ scans pass.
 Manual deploy:
 
 ```bash
-cd /opt/price-monitor
+cd /home/igor/price-monitor
 git pull --ff-only origin master
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
@@ -109,7 +110,7 @@ docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod
 Rollback:
 
 ```bash
-cd /opt/price-monitor
+cd /home/igor/price-monitor
 git checkout <previous-known-good-sha>
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
@@ -133,7 +134,7 @@ Keep real env files out of git. Example files contain placeholders only.
 Create backup directory:
 
 ```bash
-mkdir -p /opt/price-monitor/backups
+mkdir -p /home/igor/price-monitor/backups
 ```
 
 Backup:
@@ -141,7 +142,7 @@ Backup:
 ```bash
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec -T mariadb \
   sh -c 'mariadb-dump -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" --single-transaction --routines --triggers "$MARIADB_DATABASE"' \
-  | gzip > "/opt/price-monitor/backups/price-monitor_$(date +%F_%H-%M-%S).sql.gz"
+  | gzip > "/home/igor/price-monitor/backups/price-monitor_$(date +%F_%H-%M-%S).sql.gz"
 ```
 
 Restore drill:

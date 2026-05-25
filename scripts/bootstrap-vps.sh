@@ -1,9 +1,15 @@
 #!/usr/bin/env sh
 set -eu
 
-APP_DIR="${APP_DIR:-/opt/price-monitor}"
+DEFAULT_APP_DIR="${HOME:-$(pwd -P)}/price-monitor"
+APP_DIR="${APP_DIR:-$DEFAULT_APP_DIR}"
 REPO_URL="${REPO_URL:-https://github.com/Igor-creato/monitoring-cen.git}"
 BRANCH="${BRANCH:-master}"
+
+case "$APP_DIR" in
+    /*) ;;
+    *) APP_DIR="$(pwd -P)/$APP_DIR" ;;
+esac
 
 prompt_required() {
     label="$1"
@@ -211,4 +217,4 @@ sh ./scripts/smoke.sh "https://$APP_DOMAIN"
 echo
 echo "Bootstrap complete."
 echo "Set these GitHub repository secrets for automatic deploys:"
-echo "VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_APP_DIR=$APP_DIR"
+echo "VPS_HOST, VPS_PORT, VPS_USER, VPS_SSH_KEY, VPS_APP_DIR=$APP_DIR"
