@@ -54,11 +54,48 @@ Prepare VPS:
 - Minimum: 1 vCPU, 2 GB RAM, 20 GB SSD.
 - Recommended: 2 vCPU, 4 GB RAM, 40 GB SSD.
 
-Deploy:
+First-time bootstrap on the VPS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Igor-creato/monitoring-cen/master/scripts/bootstrap-vps.sh -o /tmp/bootstrap-vps.sh
+sudo sh /tmp/bootstrap-vps.sh
+```
+
+The script asks for:
+
+- application domain (`APP_DOMAIN`), for example `monitor.example.com`;
+- Let's Encrypt email (`LETSENCRYPT_EMAIL`);
+- admin email list (`ADMIN_EMAILS`);
+- SMTP host, port, username, password, sender email, and STARTTLS flag.
+
+It clones the repository to `/opt/price-monitor` by default, writes `.env.prod`
+with generated secrets, starts the Docker Compose production stack, and runs the
+smoke test against `https://$APP_DOMAIN`.
+
+Optional bootstrap overrides:
+
+```bash
+APP_DIR=/opt/price-monitor \
+REPO_URL=https://github.com/Igor-creato/monitoring-cen.git \
+BRANCH=master \
+sudo -E sh /tmp/bootstrap-vps.sh
+```
+
+Configure GitHub repository secrets after bootstrap:
+
+- `VPS_HOST`: VPS IP address or hostname.
+- `VPS_USER`: SSH user that can access `VPS_APP_DIR` and run Docker Compose.
+- `VPS_SSH_KEY`: private SSH key for `VPS_USER`.
+- `VPS_APP_DIR`: `/opt/price-monitor`.
+
+Automatic deploys run from the `master` branch after CI, Docker builds, and image
+scans pass.
+
+Manual deploy:
 
 ```bash
 cd /opt/price-monitor
-git pull --ff-only origin main
+git pull --ff-only origin master
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
 ```
@@ -76,7 +113,12 @@ cd /opt/price-monitor
 git checkout <previous-known-good-sha>
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
 sh ./scripts/smoke.sh "https://$APP_DOMAIN"
+git checkout master
 ```
+
+Note: local AGENTS instructions prefer `rtk`-prefixed commands, but `rtk` is not
+available in the current local environment. The documented server commands use
+plain `git`, `docker`, `curl`, and `sh` so a fresh VPS does not depend on `rtk`.
 
 ## Configs
 

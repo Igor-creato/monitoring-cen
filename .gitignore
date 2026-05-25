@@ -1,4 +1,8 @@
 .env
+.env.local
+.env.stage
+.env.prod
+.env.prod.*.bak
 .venv/
 __pycache__/
 *.py[cod]

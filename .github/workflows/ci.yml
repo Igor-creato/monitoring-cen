@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   contents: read
@@ -100,7 +100,7 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     needs: docker
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +114,7 @@ jobs:
           script_stop: true
           script: |
             cd "${{ secrets.VPS_APP_DIR }}"
-            git pull --ff-only origin main
+            git pull --ff-only origin master
             docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
             APP_DOMAIN="$(grep -E '^APP_DOMAIN=' .env.prod | tail -n 1 | cut -d= -f2-)"
             sh ./scripts/smoke.sh "https://$APP_DOMAIN"
